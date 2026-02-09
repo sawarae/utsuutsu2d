@@ -1,0 +1,38 @@
+# Tsukuyomi Blend Shape Model Configuration
+# Drives the generic blend shape INP builder.
+# Each emotion is an opacity-based overlay controlled by its own 0→1 parameter.
+
+[meta]
+name = "Tsukuyomi Blend Shape"
+artist = "花兎*"
+copyright = "つくよみちゃん万能立ち絵素材（花兎＊様）"
+base_dir = "assets/external/つくよみちゃん万能立ち絵素材（花兎＊様）/02 いろんなポーズのPNG"
+
+[mesh]
+width = 2000
+height = 4000
+
+# Base layers: mouth closed/open toggle (controlled by MouthOpen param)
+[base.mouth_closed]
+name = "Base_MouthClosed"
+file = "01 基本/01-01a 基本-目ふんわり-口閉じ.png"
+
+[base.mouth_open]
+name = "Base_MouthOpen"
+file = "01 基本/01-01b 基本-目ふんわり-口開け.png"
+
+# Emotion overlay layers: each controlled by its own 0→1 param
+[emotions.Gentle]
+file = "02 喜び・称賛/02-03b ほんわか-指先合わせ-口開け.png"
+
+[emotions.Joy]
+file = "02 喜び・称賛/02-04b 喜び・称賛-口開け.png"
+
+[emotions.Blush]
+file = "06 きょとん・驚き・赤面/06-03b 赤面＆驚き-口大.png"
+
+[emotions.Trouble]
+file = "07 トラブル・謝罪/07-01b 大変です！-口開け.png"
+
+[emotions.Singing]
+file = "11 歌/11-01b 歌う-口開け.png"
