@@ -1,4 +1,4 @@
-# utsuutsu2d
+# utsutsu2d
 
 ## つくよみちゃんについて
 
