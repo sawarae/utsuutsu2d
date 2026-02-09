@@ -1,0 +1,34 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+.pub/
+build/
+pubspec.lock
+macos/
+!gui/macos/
+gui/macos/Runner/Configs/
+gui/macos/Runner/Assets.xcassets/
+.metadata
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+*.iml
+
+# Misc
+*.log
+.DS_Store
+
+# Coverage
+coverage/
+
+# Generated
+*.g.dart
+
+# Test artifacts
+test/screenshots/
+
+# Model files (large binaries)
+*.inx
+*.inp
+*.png

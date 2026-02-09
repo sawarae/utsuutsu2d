@@ -1,0 +1,25 @@
+name: utsutsu2d
+description: Pure Dart puppet animation library inspired by Inochi2D/inox2d
+version: 0.1.0
+homepage: https://github.com/sawarae/utsutsu2d
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+  flutter: '>=3.10.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  archive: ^3.4.0
+  path: ^1.8.0
+  image: ^4.1.0
+
+flutter:
+  shaders:
+    - lib/src/render/shaders/mask_threshold.frag
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  test: ^1.24.0

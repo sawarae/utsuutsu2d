@@ -1,0 +1,66 @@
+{
+  "timestep": 0.0166,
+  "length": 30,
+  "additive": false,
+  "animationWeight": 1.0,
+  "leadIn": -1,
+  "leadOut": -1,
+  "lanes": [
+    {
+      "guid": "eye-left-open",
+      "target": 0,
+      "interpolation": 4,
+      "merge_mode": 3,
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": 1.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 6,
+          "value": 0.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 24,
+          "value": 0.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 30,
+          "value": 1.0,
+          "tension": 0.5
+        }
+      ]
+    },
+    {
+      "guid": "eye-right-open",
+      "target": 0,
+      "interpolation": 4,
+      "merge_mode": 3,
+      "keyframes": [
+        {
+          "frame": 0,
+          "value": 1.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 6,
+          "value": 0.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 24,
+          "value": 0.0,
+          "tension": 0.5
+        },
+        {
+          "frame": 30,
+          "value": 1.0,
+          "tension": 0.5
+        }
+      ]
+    }
+  ]
+}
