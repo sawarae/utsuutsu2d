@@ -5,6 +5,7 @@ A pure Dart puppet animation library for Flutter, inspired by [Inochi2D](https:/
 Loads and renders `.inp` (Inochi2D Puppet) and `.inx` (Inochi2D eXtended) model files with support for:
 
 - Blend shapes and parameter-driven animation
+- JSON-based animation playback
 
 ## Requirements
 
