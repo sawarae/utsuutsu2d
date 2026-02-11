@@ -2,7 +2,9 @@
 class MeshGenerator {
   /// Generate a simple quad mesh
   ///
-  /// Creates a rectangular mesh with 4 vertices and 2 triangles
+  /// Creates a rectangular mesh with 5 vertices (4 corners + center) and
+  /// 4 triangles in a fan layout. This avoids the diagonal seam artifact
+  /// that occurs with a 2-triangle quad when rendering transparent layers.
   static Map<String, dynamic> quad(
     double width,
     double height, {
@@ -13,14 +15,16 @@ class MeshGenerator {
     final halfH = height / 2;
 
     final verts = [
-      // Top-left
+      // 0: Top-left
       centerX - halfW, centerY - halfH,
-      // Top-right
+      // 1: Top-right
       centerX + halfW, centerY - halfH,
-      // Bottom-right
+      // 2: Bottom-right
       centerX + halfW, centerY + halfH,
-      // Bottom-left
+      // 3: Bottom-left
       centerX - halfW, centerY + halfH,
+      // 4: Center
+      centerX, centerY,
     ];
 
     return {
@@ -31,10 +35,13 @@ class MeshGenerator {
         1.0, 0.0, // Top-right
         1.0, 1.0, // Bottom-right
         0.0, 1.0, // Bottom-left
+        0.5, 0.5, // Center
       ],
       'indices': [
-        0, 1, 2, // First triangle
-        2, 3, 0, // Second triangle
+        0, 1, 4, // Top triangle
+        1, 2, 4, // Right triangle
+        2, 3, 4, // Bottom triangle
+        3, 0, 4, // Left triangle
       ],
     };
   }
