@@ -44,9 +44,7 @@ class ParameterSlider extends StatelessWidget {
                     min: param.minValue.x,
                     max: param.maxValue.x,
                     onChanged: (value) {
-                      print('Slider changed: ${param.name} = $value');
                       controller.setParameter(param.name, value);
-                      print('setParameter called');
                     },
                   ),
                 ),
