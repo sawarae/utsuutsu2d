@@ -67,3 +67,71 @@ file = "02 漫符/01 キラキラ.png"
 
 [emotions.Sweat]
 file = "02 漫符/02 頭の横に汗.png"
+
+# Expression presets (from 02 組み合わせ例)
+# Each preset defines which params are active (param = 1.0)
+# Params not listed default to 0.0
+
+[expressions.01]
+name = "手ぶらで走る"
+MouthOpen = 1.0
+Eye_Normal = 1.0
+Arm_Empty = 1.0
+
+[expressions.02]
+name = "楽しそうに走る"
+Eye_Happy = 1.0
+Arm_Empty = 1.0
+
+[expressions.03]
+name = "必死に走る"
+MouthOpen = 1.0
+Eye_Pinch = 1.0
+Arm_Empty = 1.0
+Sweat = 1.0
+
+[expressions.04]
+name = "お掃除"
+Eye_Normal = 1.0
+Arm_Broom = 1.0
+
+[expressions.05]
+name = "お掃除+キラキラ"
+Eye_Normal = 1.0
+Arm_Broom = 1.0
+Sparkles = 1.0
+
+[expressions.06]
+name = "お掃除+キラキラ+文字"
+Eye_Normal = 1.0
+Arm_Broom = 1.0
+Sparkles = 1.0
+Text_WhiteBorder = 1.0
+
+[expressions.07]
+name = "慌てて掃除する"
+MouthOpen = 1.0
+Eye_Normal = 1.0
+Arm_Broom = 1.0
+Sweat = 1.0
+
+[expressions.08]
+name = "必死に掃除する"
+MouthOpen = 1.0
+Eye_Pinch = 1.0
+Arm_Broom = 1.0
+Sweat = 1.0
+
+[expressions.09]
+name = "荷物を運ぶ"
+MouthOpen = 1.0
+Eye_Normal = 1.0
+Arm_Luggage = 1.0
+Sweat = 1.0
+
+[expressions.10]
+name = "必死に荷物を運ぶ"
+MouthOpen = 1.0
+Eye_Pinch = 1.0
+Arm_Luggage = 1.0
+Sweat = 1.0

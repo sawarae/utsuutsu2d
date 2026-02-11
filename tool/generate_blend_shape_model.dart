@@ -90,6 +90,8 @@ void generateBlendShapeModel({
       (config['background'] as Map<String, dynamic>?) ?? <String, dynamic>{};
   final baseConfig = (config['base'] ?? {}) as Map<String, dynamic>;
   final emotionsConfig = (config['emotions'] ?? {}) as Map<String, dynamic>;
+  final expressionsConfig =
+      (config['expressions'] as Map<String, dynamic>?) ?? <String, dynamic>{};
 
   final modelName = meta['name'] as String? ?? 'Blend Shape Model';
   final baseDir = meta['base_dir'] as String? ?? '';
@@ -295,6 +297,27 @@ void generateBlendShapeModel({
   builder.params(params);
 
   // ──────────────────────────────────────────────────────
+  // Build expression presets
+  // ──────────────────────────────────────────────────────
+  final expressionPresets = <String, Map<String, double>>{};
+  for (final entry in expressionsConfig.entries) {
+    if (entry.value is! Map<String, dynamic>) continue;
+    final preset = entry.value as Map<String, dynamic>;
+    final name = preset['name'] as String? ?? entry.key;
+    final paramValues = <String, double>{};
+    for (final p in preset.entries) {
+      if (p.key == 'name') continue;
+      final val = _toDouble(p.value);
+      if (val != null) paramValues[p.key] = val;
+    }
+    expressionPresets[name] = paramValues;
+  }
+
+  if (expressionPresets.isNotEmpty) {
+    builder.expressions(expressionPresets);
+  }
+
+  // ──────────────────────────────────────────────────────
   // Write output
   // ──────────────────────────────────────────────────────
   final inpBytes = builder.build();
@@ -314,6 +337,16 @@ void generateBlendShapeModel({
   print('  MouthOpen: toggles base mouth (layers $mouthClosedIdx-$mouthOpenIdx)');
   for (final name in emotionNames) {
     print('  $name: overlay (0=off, 1=on)');
+  }
+  if (expressionPresets.isNotEmpty) {
+    print('\nExpressions (${expressionPresets.length}):');
+    for (final entry in expressionPresets.entries) {
+      final active = entry.value.entries
+          .where((e) => e.value > 0)
+          .map((e) => '${e.key}=${e.value}')
+          .join(', ');
+      print('  ${entry.key}: $active');
+    }
   }
 }
 
