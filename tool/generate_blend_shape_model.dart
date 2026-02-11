@@ -8,12 +8,14 @@ import 'lib/toml_parser.dart';
 // TOML-driven blend shape model generator
 //
 // Reads a TOML config that defines:
-//   [meta]      — model name, artist, copyright, base_dir
-//   [mesh]      — width/height for quad meshes
-//   [base]      — mouth_closed / mouth_open layers (MouthOpen param)
-//   [emotions]  — N emotion overlays, each with its own 0→1 param
+//   [meta]       — model name, artist, copyright, base_dir
+//   [mesh]       — width/height for quad meshes
+//   [background] — always-visible layers rendered behind everything (optional)
+//   [base]       — mouth_closed / mouth_open layers (MouthOpen param)
+//   [emotions]   — N emotion overlays, each with its own 0→1 param
 //
 // Generates an INP with:
+//   Background layers (always opacity 1.0, no parameters)
 //   MouthOpen (0→1): toggles base mouth closed/open
 //   <EmotionName> (0→1): toggles each emotion overlay opacity
 // ============================================================================
@@ -84,6 +86,8 @@ void generateBlendShapeModel({
   final config = TomlParser.parse(configFile.readAsStringSync());
   final meta = (config['meta'] ?? {}) as Map<String, dynamic>;
   final meshConfig = (config['mesh'] ?? {}) as Map<String, dynamic>;
+  final backgroundConfig =
+      (config['background'] as Map<String, dynamic>?) ?? <String, dynamic>{};
   final baseConfig = (config['base'] ?? {}) as Map<String, dynamic>;
   final emotionsConfig = (config['emotions'] ?? {}) as Map<String, dynamic>;
 
@@ -117,10 +121,30 @@ void generateBlendShapeModel({
     exit(1);
   }
 
-  // Collect all layers: base + emotions
+  // Collect all layers: background + base + emotions
   final layers = <Map<String, String>>[];
 
-  // Validate and add base layers (index 0, 1)
+  // Background layers (always visible, no parameters)
+  final backgroundCount = backgroundConfig.length;
+  for (final entry in backgroundConfig.entries) {
+    if (entry.value is! Map<String, dynamic>) {
+      print('Error: [background.${entry.key}] must be a table with a "file" key');
+      exit(1);
+    }
+    final bgDef = entry.value as Map<String, dynamic>;
+    final bgFile = bgDef['file'];
+    if (bgFile is! String) {
+      print(
+          'Error: [background.${entry.key}] must have a "file" key with a string value');
+      exit(1);
+    }
+    layers.add({
+      'name': bgDef['name'] as String? ?? entry.key,
+      'file': bgFile,
+    });
+  }
+
+  // Validate and add base layers
   final closedFile = mouthClosed['file'];
   if (closedFile is! String) {
     print('Error: [base.mouth_closed] must have a "file" key with a string value');
@@ -140,7 +164,7 @@ void generateBlendShapeModel({
     'file': openFile,
   });
 
-  // Emotion layers (index 2+)
+  // Emotion layers
   final emotionNames = <String>[];
   for (final entry in emotionsConfig.entries) {
     final emotionName = entry.key;
@@ -206,14 +230,16 @@ void generateBlendShapeModel({
   for (int i = 0; i < layers.length; i++) {
     final uuid = allocNodeUuid();
     nodeUuids.add(uuid);
+    // Background layers and first base layer (mouth closed) start visible
+    final isBackground = i < backgroundCount;
+    final isMouthClosed = i == backgroundCount;
     treeBuilder.addChild(createPartNode(
       uuid: uuid,
       name: layers[i]['name']!,
       mesh: MeshGenerator.quad(meshWidth, meshHeight),
       textureId: i,
       translation: [0.0, 0.0, 0.0],
-      // Layer 0 (base mouth closed) visible by default, others hidden
-      opacity: i == 0 ? 1.0 : 0.0,
+      opacity: (isBackground || isMouthClosed) ? 1.0 : 0.0,
     ));
   }
 
@@ -224,7 +250,9 @@ void generateBlendShapeModel({
   // ──────────────────────────────────────────────────────
   final params = <Map<String, dynamic>>[];
 
-  // Parameter: MouthOpen — controls base layers 0-1
+  // Parameter: MouthOpen — controls base layers (after background)
+  final mouthClosedIdx = backgroundCount;
+  final mouthOpenIdx = backgroundCount + 1;
   params.add(createParam(
     name: 'MouthOpen',
     uuid: allocParamUuid(),
@@ -232,18 +260,22 @@ void generateBlendShapeModel({
     max: 1.0,
     defaultValue: 0.0,
     bindings: [
-      // Layer 0 (mouth closed): visible when closed, hidden when open
+      // Mouth closed: visible when closed, hidden when open
       createBinding(
-          node: nodeUuids[0], paramName: 'opacity', values: [[1.0], [0.0]]),
-      // Layer 1 (mouth open): hidden when closed, visible when open
+          node: nodeUuids[mouthClosedIdx],
+          paramName: 'opacity',
+          values: [[1.0], [0.0]]),
+      // Mouth open: hidden when closed, visible when open
       createBinding(
-          node: nodeUuids[1], paramName: 'opacity', values: [[0.0], [1.0]]),
+          node: nodeUuids[mouthOpenIdx],
+          paramName: 'opacity',
+          values: [[0.0], [1.0]]),
     ],
   ));
 
-  // Parameters: one per emotion overlay (layers 2+)
+  // Parameters: one per emotion overlay (layers after background + base)
   for (int i = 0; i < emotionNames.length; i++) {
-    final layerIdx = i + 2; // skip base layers
+    final layerIdx = backgroundCount + 2 + i;
     params.add(createParam(
       name: emotionNames[i],
       uuid: allocParamUuid(),
@@ -272,10 +304,16 @@ void generateBlendShapeModel({
   outputFile.writeAsBytesSync(inpBytes);
 
   print('\n=== Generated $output (${(inpBytes.length / 1024 / 1024).toStringAsFixed(1)} MB) ===');
+  if (backgroundCount > 0) {
+    print('\nBackground layers ($backgroundCount): always visible');
+    for (int i = 0; i < backgroundCount; i++) {
+      print('  ${layers[i]['name']}');
+    }
+  }
   print('\nParameters (${params.length}):');
-  print('  MouthOpen: toggles base mouth (layers 0-1)');
+  print('  MouthOpen: toggles base mouth (layers $mouthClosedIdx-$mouthOpenIdx)');
   for (final name in emotionNames) {
-    print('  $name: emotion overlay (0=off, 1=on)');
+    print('  $name: overlay (0=off, 1=on)');
   }
 }
 

@@ -1,0 +1,69 @@
+# Tsukuyomi Mini Character — 14 横向き走り (Sideways Running)
+# Parts-based blend shape model using transparent PNG overlays.
+#
+# Layer order (back to front):
+#   background: BackArm → Base
+#   base:       MouthClosed ↔ MouthOpen (toggle)
+#   overlays:   Eyes, Arms, Effects (each 0→1 toggle)
+
+[meta]
+name = "Tsukuyomi Mini 14 Run"
+artist = "きばやし"
+copyright = "つくよみちゃん万能ミニキャラ素材（きばやし様）"
+base_dir = "assets/external/つくよみちゃん万能ミニキャラ素材（きばやし様）/素材一式/14 横向き走り ★PSDあり/01 パーツごとの透過PNG"
+
+[mesh]
+width = 2000
+height = 2000
+
+# Background layers: always visible, rendered back to front
+[background.BackArm]
+name = "BackArm"
+file = "07 走る腕奥/01 走る腕奥 ※手ぶらで走る時に必要.png"
+
+[background.Base]
+name = "Base"
+file = "06 ベース/01 ベース ※選択肢なし.png"
+
+# Base layers: mouth closed/open toggle (controlled by MouthOpen param)
+[base.mouth_closed]
+name = "MouthClosed"
+file = "04 口/01 口閉じ.png"
+
+[base.mouth_open]
+name = "MouthOpen"
+file = "04 口/02 口開け.png"
+
+# Overlay layers: each controlled by its own 0→1 param
+# --- Eyes (select one) ---
+[emotions.Eye_Normal]
+file = "03 目/01 通常.png"
+
+[emotions.Eye_Pinch]
+file = "03 目/02 ピンチ.png"
+
+[emotions.Eye_Happy]
+file = "03 目/03 楽しい.png"
+
+# --- Arms & Items (select one) ---
+[emotions.Arm_Broom]
+file = "05 腕＆持ち物/01 デッキブラシで掃除.png"
+
+[emotions.Arm_Luggage]
+file = "05 腕＆持ち物/02 荷物を運ぶ.png"
+
+[emotions.Arm_Empty]
+file = "05 腕＆持ち物/03 手ぶらで走る ※ベースの下に「走る腕奥」が必要.png"
+
+# --- Effects ---
+[emotions.Text_WhiteBorder]
+file = "01 文字/01 ササッ（白縁あり）.png"
+
+[emotions.Text_NoBorder]
+file = "01 文字/02 ササッ（白縁なし）.png"
+
+[emotions.Sparkles]
+file = "02 漫符/01 キラキラ.png"
+
+[emotions.Sweat]
+file = "02 漫符/02 頭の横に汗.png"
