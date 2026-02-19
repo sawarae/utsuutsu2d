@@ -58,6 +58,9 @@ class RenderCtx {
   /// Manual vertex offset overrides for mesh editor preview (nodeId → offsets).
   final Map<PuppetNodeUuid, List<Vec2>> _vertexOverrides = {};
 
+  /// Set of node IDs that are manually hidden (visibility override).
+  final Set<PuppetNodeUuid> _hiddenNodes = {};
+
   RenderCtx();
 
   /// Set per-vertex offset override for a node (local mesh space).
@@ -72,6 +75,22 @@ class RenderCtx {
 
   /// Clear all vertex overrides.
   void clearVertexOverrides() => _vertexOverrides.clear();
+
+  /// Set whether a node is hidden (visibility override).
+  /// Hidden nodes are skipped during rendering.
+  void setNodeHidden(PuppetNodeUuid nodeId, bool hidden) {
+    if (hidden) {
+      _hiddenNodes.add(nodeId);
+    } else {
+      _hiddenNodes.remove(nodeId);
+    }
+  }
+
+  /// Returns true if the node is marked as hidden.
+  bool isNodeHidden(PuppetNodeUuid nodeId) => _hiddenNodes.contains(nodeId);
+
+  /// Clear all hidden node overrides (make all nodes visible).
+  void clearHiddenNodes() => _hiddenNodes.clear();
 
   /// Initialize render context from puppet
   void initialize(Puppet puppet) {

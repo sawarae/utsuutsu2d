@@ -276,6 +276,26 @@ class PuppetController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Set the visibility of a specific part by node ID.
+  ///
+  /// When [visible] is false the part is skipped during rendering.
+  /// When [visible] is true the part renders normally.
+  void setPartVisibility(int nodeId, bool visible) {
+    _model?.puppet.renderCtx?.setNodeHidden(nodeId, !visible);
+    notifyListeners();
+  }
+
+  /// Returns true if the part with the given node ID is currently visible.
+  bool isPartVisible(int nodeId) {
+    return !(_model?.puppet.renderCtx?.isNodeHidden(nodeId) ?? false);
+  }
+
+  /// Make all parts visible by clearing all hidden-node overrides.
+  void clearPartVisibilityOverrides() {
+    _model?.puppet.renderCtx?.clearHiddenNodes();
+    notifyListeners();
+  }
+
   /// Updates the puppet state without advancing physics time.
   ///
   /// This method is useful for manual parameter control when animation
