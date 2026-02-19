@@ -206,14 +206,14 @@ class _ViewerPageState extends State<ViewerPage>
         camera.position = Vec2(0, -1850);
       } else {
         camera.zoom = _zoomLevelStr.isNotEmpty
-            ? (double.tryParse(_zoomLevelStr) ?? 0.32)
-            : 0.32;
+            ? (double.tryParse(_zoomLevelStr) ?? 0.35)
+            : 0.35;
         final x = _cameraXStr.isNotEmpty
-            ? (double.tryParse(_cameraXStr) ?? 0)
-            : 0.0;
+            ? (double.tryParse(_cameraXStr) ?? 146.0)
+            : 146.0;
         final y = _cameraYStr.isNotEmpty
-            ? (double.tryParse(_cameraYStr) ?? -1850)
-            : -1850.0;
+            ? (double.tryParse(_cameraYStr) ?? -32.0)
+            : -32.0;
         camera.position = Vec2(x, y);
       }
       controller.updateManual();
@@ -253,9 +253,12 @@ class _ViewerPageState extends State<ViewerPage>
 
       final outputPath =
           path ?? 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png';
+      final cam = _controller?.camera;
+      debugPrint('Camera: zoom=${cam?.zoom} pos=(${cam?.position.x}, ${cam?.position.y})');
+      debugPrint('Widget size: ${boundary.size}');
       final file = File(outputPath);
       await file.writeAsBytes(byteData.buffer.asUint8List());
-      debugPrint('Screenshot saved: $outputPath');
+      debugPrint('Screenshot saved: $outputPath (${image.width}x${image.height})');
     } catch (e) {
       debugPrint('Error saving screenshot: $e');
     }
@@ -444,8 +447,8 @@ class _ViewerPageState extends State<ViewerPage>
           // Reset camera to default
           final camera = _controller!.camera;
           if (camera == null) return;
-          camera.zoom = 0.32;
-          camera.position = Vec2(0, -1850);
+          camera.zoom = 0.35;
+          camera.position = Vec2(146, -32);
           _controller!.updateManual();
           setState(() {});
         },
