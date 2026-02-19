@@ -225,16 +225,18 @@ class InpParser {
         .map((p) => Param.fromJson(p as Map<String, dynamic>))
         .toList();
 
-    // Parse expression presets
-    final expressionsJson =
-        json['expressions'] as Map<String, dynamic>? ?? {};
+    // Parse expression presets (can be Map or empty List)
+    final expressionsRaw = json['expressions'];
     final expressions = <String, Map<String, double>>{};
-    for (final entry in expressionsJson.entries) {
-      final values = entry.value as Map<String, dynamic>? ?? {};
-      expressions[entry.key] = values.map(
-        (k, v) => MapEntry(k, (v as num).toDouble()),
-      );
+    if (expressionsRaw is Map<String, dynamic>) {
+      for (final entry in expressionsRaw.entries) {
+        final values = entry.value as Map<String, dynamic>? ?? {};
+        expressions[entry.key] = values.map(
+          (k, v) => MapEntry(k, (v as num).toDouble()),
+        );
+      }
     }
+    // If expressions is a List (empty or otherwise), we ignore it
 
     return Puppet(
       meta: meta,
