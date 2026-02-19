@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as img;
@@ -92,6 +93,10 @@ class _ViewerPageState extends State<ViewerPage>
   String? _errorMessage;
   bool _isLoading = false;
   final GlobalKey _puppetKey = GlobalKey();
+
+  // Camera interaction state
+  Offset? _lastPanPosition;
+  final _zoomSensitivity = 0.001;
 
   @override
   void initState() {
@@ -395,19 +400,63 @@ class _ViewerPageState extends State<ViewerPage>
       children: [
         Expanded(
           flex: 3,
-          child: RepaintBoundary(
-            key: _puppetKey,
-            child: PuppetWidget(
-              controller: _controller!,
-              backgroundColor: Colors.grey[300],
-            ),
-          ),
+          child: _buildViewport(),
         ),
         SizedBox(
           width: 300,
           child: _buildParameterPanel(),
         ),
       ],
+    );
+  }
+
+  Widget _buildViewport() {
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          final camera = _controller!.camera;
+          if (camera == null) return;
+          final delta = event.scrollDelta.dy;
+          final factor = 1.0 - delta * _zoomSensitivity;
+          camera.zoom = (camera.zoom * factor).clamp(0.02, 5.0);
+          _controller!.updateManual();
+          setState(() {});
+        }
+      },
+      child: GestureDetector(
+        onPanStart: (details) {
+          _lastPanPosition = details.localPosition;
+        },
+        onPanUpdate: (details) {
+          final camera = _controller!.camera;
+          if (camera == null || _lastPanPosition == null) return;
+          final delta = details.localPosition - _lastPanPosition!;
+          _lastPanPosition = details.localPosition;
+          camera.position = Vec2(
+            camera.position.x - delta.dx / camera.zoom,
+            camera.position.y + delta.dy / camera.zoom,
+          );
+          _controller!.updateManual();
+          setState(() {});
+        },
+        onPanEnd: (_) => _lastPanPosition = null,
+        onDoubleTap: () {
+          // Reset camera to default
+          final camera = _controller!.camera;
+          if (camera == null) return;
+          camera.zoom = 0.32;
+          camera.position = Vec2(0, -1850);
+          _controller!.updateManual();
+          setState(() {});
+        },
+        child: RepaintBoundary(
+          key: _puppetKey,
+          child: PuppetWidget(
+            controller: _controller!,
+            backgroundColor: Colors.grey[300],
+          ),
+        ),
+      ),
     );
   }
 
