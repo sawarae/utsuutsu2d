@@ -394,7 +394,7 @@ class _ViewerPageState extends State<ViewerPage>
         key: _puppetKey,
         child: PuppetWidget(
           controller: _controller!,
-          backgroundColor: Colors.grey[300],
+          backgroundColor: Colors.transparent,
         ),
       );
     }
