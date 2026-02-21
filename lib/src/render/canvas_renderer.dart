@@ -47,9 +47,18 @@ class CanvasRenderer {
     final viewProjection = camera.viewProjectionMatrix(size.width, size.height);
     _applyMatrix(canvas, viewProjection, size);
 
+    // Isolate puppet rendering in a transparent compositing layer.
+    // Without this, drawables with multiply (or other) blend modes that
+    // are not inside a Composite node blend directly against the canvas
+    // background (e.g. gray), producing incorrect colors (Issue #4).
+    // Inside this layer, blend modes only interact with previously drawn
+    // puppet content, matching PSD compositing behavior.
+    canvas.saveLayer(null, Paint());
+
     // Draw all drawables
     _drawAllDrawables(canvas, puppet);
 
+    canvas.restore(); // compositing layer
     canvas.restore();
   }
 
