@@ -32,9 +32,9 @@ class CanvasRenderer {
       _maskShaderProgram = await ui.FragmentProgram.fromAsset(
         'packages/utsutsu2d/lib/src/render/shaders/mask_threshold.frag',
       );
-      print('[CanvasRenderer] GPU mask threshold shader loaded');
+      // Shader loaded successfully
     } catch (e) {
-      print('[CanvasRenderer] Shader load failed, using ColorFilter fallback: $e');
+      // Shader unavailable — ColorFilter fallback will be used
       _maskShaderProgram = null;
     }
   }
@@ -91,23 +91,13 @@ class CanvasRenderer {
     }
   }
 
-  // Debug counter for logging
-  static int _debugDrawCount = 0;
-  static bool _debugLogged = false;
-
   void _drawTexturedMesh(Canvas canvas, RenderData data) {
     final mesh = data.mesh;
     final texturedMesh = data.texturedMesh;
-    if (mesh == null) {
-      if (!_debugLogged) print('[Render] mesh is null');
-      return;
-    }
+    if (mesh == null) return;
 
     final vertices = data.deformedVertices ?? mesh.vertices;
-    if (vertices.isEmpty) {
-      if (!_debugLogged) print('[Render] vertices is empty');
-      return;
-    }
+    if (vertices.isEmpty) return;
 
     // Get texture and atlas region if available
     ui.Image? texture;
@@ -120,13 +110,6 @@ class CanvasRenderer {
       if (atlasRegion != null && mesh.uvs.isNotEmpty) {
         atlasUvs = mesh.uvs.map((uv) => atlasRegion.transformUV(uv)).toList();
       }
-    }
-
-    // Debug log first few draws
-    if (_debugDrawCount < 3) {
-      print(
-          '[Render] Drawing mesh: vertices=${vertices.length}, uvs=${mesh.uvs.length}, indices=${mesh.indices.length}, texId=${texturedMesh?.albedoTextureId}, hasTexture=${texture != null}');
-      _debugDrawCount++;
     }
 
     // Use actual blend mode (clipToLower uses srcATop to clip to previously drawn content)
@@ -237,7 +220,8 @@ class CanvasRenderer {
           data.drawable.opacity,
         );
       } else {
-        // For normal blend mode without masks, render directly
+        // For normal blend mode without masks, render directly.
+        // Use reduced epsilon to minimize visible lines at mesh boundaries.
         final paint = Paint()
           ..blendMode = BlendMode.srcOver
           ..color = Colors.white.withOpacity(data.drawable.opacity)
@@ -249,15 +233,11 @@ class CanvasRenderer {
           data.mesh!.indices,
           texture,
           paint,
+          epsilon: _normalEpsilon,
         );
       }
     } else {
       _drawWireframe(canvas, vertices, data.mesh!.indices);
-      if (!_debugLogged) {
-        print(
-            '[Render] No texture for texId=${data.texturedMesh?.albedoTextureId}, drawing wireframe');
-        _debugLogged = true;
-      }
     }
 
     canvas.restore();
@@ -281,11 +261,6 @@ class CanvasRenderer {
     BlendMode blendMode,
     double opacity,
   ) {
-    // Debug: log opacity values to understand the issue
-    if (blendMode == BlendMode.multiply && opacity != 1.0) {
-      print('[DEBUG] multiply blend with opacity=$opacity');
-    }
-
     // Calculate bounding box for the mesh
     var minX = double.infinity;
     var minY = double.infinity;
@@ -357,8 +332,9 @@ class CanvasRenderer {
     List<Vec2> uvs,
     List<int> indices,
     ui.Image texture,
-    Paint paint,
-  ) {
+    Paint paint, {
+    double epsilon = _defaultEpsilon,
+  }) {
     if (indices.length < 3) return;
 
     // Draw textured mesh using affine-transformed texture per triangle
@@ -385,9 +361,18 @@ class CanvasRenderer {
         uvs[i2],
         texture,
         paint,
+        epsilon: epsilon,
       );
     }
   }
+
+  /// Default epsilon for non-normal blend modes (offscreen buffer path).
+  /// Larger value fills gaps between triangles (Issue #118).
+  static const _defaultEpsilon = 0.5;
+
+  /// Reduced epsilon for normal blend mode (direct path).
+  /// Smaller value reduces visible expansion at mesh boundaries (Issue #268).
+  static const _normalEpsilon = 0.15;
 
   void _drawTexturedTriangle(
     Canvas canvas,
@@ -398,15 +383,17 @@ class CanvasRenderer {
     Vec2 uv1,
     Vec2 uv2,
     ui.Image texture,
-    Paint paint,
-  ) {
+    Paint paint, {
+    double epsilon = _defaultEpsilon,
+  }) {
     canvas.save();
 
     // Expand clip path vertices by sub-pixel epsilon to close gaps between
     // adjacent triangles. This prevents jagged "tooth" artifacts at triangle
     // seams, especially visible in hair highlights (Issue #118).
     // Only the clip path is expanded — texture coordinates remain unchanged.
-    const epsilon = 0.5;
+    // For normal blend mode, a smaller epsilon reduces visible lines at mesh
+    // boundaries (Issue #268).
     final cx = (v0.x + v1.x + v2.x) / 3.0;
     final cy = (v0.y + v1.y + v2.y) / 3.0;
     final ev0 = expandVertex(v0.x, v0.y, cx, cy, epsilon);
