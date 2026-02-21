@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:image/image.dart' as img;
@@ -32,6 +33,18 @@ const bool _dumpMesh = bool.fromEnvironment('DUMP_MESH');
 const String? _dumpMeshPath = String.fromEnvironment('DUMP_MESH_PATH') != ''
     ? String.fromEnvironment('DUMP_MESH_PATH')
     : null;
+
+// Camera constants
+// Default camera position based on Tsukuyomi-chan's world coordinates
+// (measured from actual model: X center=146, Y center=-32)
+const double _kDefaultZoom = 0.35;
+const double _kDefaultCameraX = 146.0;
+const double _kDefaultCameraY = -32.0;
+
+// Zoom limits for viewport interaction
+const double _kMinZoom = 0.02;
+const double _kMaxZoom = 5.0;
+const double _kZoomSensitivity = 0.001;
 
 /// Top-level function for compute() - decodes TGA to PNG bytes
 Uint8List _decodeTgaToPng(Uint8List data) {
@@ -92,6 +105,9 @@ class _ViewerPageState extends State<ViewerPage>
   String? _errorMessage;
   bool _isLoading = false;
   final GlobalKey _puppetKey = GlobalKey();
+
+  // Camera interaction state
+  Offset? _lastPanPosition;
 
   @override
   void initState() {
@@ -191,24 +207,27 @@ class _ViewerPageState extends State<ViewerPage>
     final camera = controller.camera;
     if (camera != null) {
       if (_screenshotMode == 'face') {
-        camera.zoom = 0.32;
-        camera.position = Vec2(0, -1850);
+        // Face close-up: higher zoom, centered on face area
+        camera.zoom = 0.8;
+        camera.position = Vec2(_kDefaultCameraX, -400);
       } else if (_screenshotMode == 'whole') {
+        // Full body view: lower zoom to fit entire character
         camera.zoom = 0.12;
-        camera.position = Vec2(0, -850);
+        camera.position = Vec2(_kDefaultCameraX, _kDefaultCameraY);
       } else if (_screenshotMode == 'diagonal') {
-        camera.zoom = 0.32;
-        camera.position = Vec2(0, -1850);
+        // Diagonal view with Head:: Yaw-Pitch parameter
+        camera.zoom = 0.8;
+        camera.position = Vec2(_kDefaultCameraX, -400);
       } else {
         camera.zoom = _zoomLevelStr.isNotEmpty
-            ? (double.tryParse(_zoomLevelStr) ?? 0.32)
-            : 0.32;
+            ? (double.tryParse(_zoomLevelStr) ?? _kDefaultZoom)
+            : _kDefaultZoom;
         final x = _cameraXStr.isNotEmpty
-            ? (double.tryParse(_cameraXStr) ?? 0)
-            : 0.0;
+            ? (double.tryParse(_cameraXStr) ?? _kDefaultCameraX)
+            : _kDefaultCameraX;
         final y = _cameraYStr.isNotEmpty
-            ? (double.tryParse(_cameraYStr) ?? -1850)
-            : -1850.0;
+            ? (double.tryParse(_cameraYStr) ?? _kDefaultCameraY)
+            : _kDefaultCameraY;
         camera.position = Vec2(x, y);
       }
       controller.updateManual();
@@ -248,9 +267,12 @@ class _ViewerPageState extends State<ViewerPage>
 
       final outputPath =
           path ?? 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png';
+      final cam = _controller?.camera;
+      debugPrint('Camera: zoom=${cam?.zoom} pos=(${cam?.position.x}, ${cam?.position.y})');
+      debugPrint('Widget size: ${boundary.size}');
       final file = File(outputPath);
       await file.writeAsBytes(byteData.buffer.asUint8List());
-      debugPrint('Screenshot saved: $outputPath');
+      debugPrint('Screenshot saved: $outputPath (${image.width}x${image.height})');
     } catch (e) {
       debugPrint('Error saving screenshot: $e');
     }
@@ -319,8 +341,11 @@ class _ViewerPageState extends State<ViewerPage>
       final output = {
         'parameters': params,
         'camera': {
-          'scale': controller.camera?.zoom ?? 0.32,
-          'position': [0, -(controller.camera?.position.y ?? -1850)],
+          'scale': controller.camera?.zoom ?? _kDefaultZoom,
+          'position': [
+            controller.camera?.position.x ?? _kDefaultCameraX,
+            -(controller.camera?.position.y ?? _kDefaultCameraY),
+          ],
           'viewport': [1280, 720],
         },
         'mesh_count': meshes.length,
@@ -386,7 +411,7 @@ class _ViewerPageState extends State<ViewerPage>
         key: _puppetKey,
         child: PuppetWidget(
           controller: _controller!,
-          backgroundColor: Colors.grey[300],
+          backgroundColor: Colors.transparent,
         ),
       );
     }
@@ -395,19 +420,63 @@ class _ViewerPageState extends State<ViewerPage>
       children: [
         Expanded(
           flex: 3,
-          child: RepaintBoundary(
-            key: _puppetKey,
-            child: PuppetWidget(
-              controller: _controller!,
-              backgroundColor: Colors.grey[300],
-            ),
-          ),
+          child: _buildViewport(),
         ),
         SizedBox(
           width: 300,
           child: _buildParameterPanel(),
         ),
       ],
+    );
+  }
+
+  Widget _buildViewport() {
+    return Listener(
+      onPointerSignal: (event) {
+        if (event is PointerScrollEvent) {
+          final camera = _controller!.camera;
+          if (camera == null) return;
+          final delta = event.scrollDelta.dy;
+          final factor = 1.0 - delta * _kZoomSensitivity;
+          camera.zoom = (camera.zoom * factor).clamp(_kMinZoom, _kMaxZoom);
+          _controller!.updateManual();
+          setState(() {});
+        }
+      },
+      child: GestureDetector(
+        onPanStart: (details) {
+          _lastPanPosition = details.localPosition;
+        },
+        onPanUpdate: (details) {
+          final camera = _controller!.camera;
+          if (camera == null || _lastPanPosition == null) return;
+          final delta = details.localPosition - _lastPanPosition!;
+          _lastPanPosition = details.localPosition;
+          camera.position = Vec2(
+            camera.position.x - delta.dx / camera.zoom,
+            camera.position.y + delta.dy / camera.zoom,
+          );
+          _controller!.updateManual();
+          setState(() {});
+        },
+        onPanEnd: (_) => _lastPanPosition = null,
+        onDoubleTap: () {
+          // Reset camera to default
+          final camera = _controller!.camera;
+          if (camera == null) return;
+          camera.zoom = _kDefaultZoom;
+          camera.position = Vec2(_kDefaultCameraX, _kDefaultCameraY);
+          _controller!.updateManual();
+          setState(() {});
+        },
+        child: RepaintBoundary(
+          key: _puppetKey,
+          child: PuppetWidget(
+            controller: _controller!,
+            backgroundColor: Colors.grey[300],
+          ),
+        ),
+      ),
     );
   }
 

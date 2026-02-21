@@ -76,6 +76,8 @@ class CanvasRenderer {
   }
 
   void _drawRenderable(Canvas canvas, RenderData data, Puppet puppet) {
+    // Skip rendering if the node is hidden via visibility override.
+    if (renderCtx.isNodeHidden(data.nodeId)) return;
     switch (data.kind) {
       case DrawableKind.texturedMesh:
         _drawTexturedMesh(canvas, data);

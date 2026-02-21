@@ -55,7 +55,42 @@ class RenderCtx {
   /// Optional texture atlas
   TextureAtlas? _atlas;
 
+  /// Manual vertex offset overrides for mesh editor preview (nodeId → offsets).
+  final Map<PuppetNodeUuid, List<Vec2>> _vertexOverrides = {};
+
+  /// Set of node IDs that are manually hidden (visibility override).
+  final Set<PuppetNodeUuid> _hiddenNodes = {};
+
   RenderCtx();
+
+  /// Set per-vertex offset override for a node (local mesh space).
+  /// Pass null to clear the override for that node.
+  void setVertexOverride(PuppetNodeUuid nodeId, List<Vec2>? offsets) {
+    if (offsets == null) {
+      _vertexOverrides.remove(nodeId);
+    } else {
+      _vertexOverrides[nodeId] = offsets;
+    }
+  }
+
+  /// Clear all vertex overrides.
+  void clearVertexOverrides() => _vertexOverrides.clear();
+
+  /// Set whether a node is hidden (visibility override).
+  /// Hidden nodes are skipped during rendering.
+  void setNodeHidden(PuppetNodeUuid nodeId, bool hidden) {
+    if (hidden) {
+      _hiddenNodes.add(nodeId);
+    } else {
+      _hiddenNodes.remove(nodeId);
+    }
+  }
+
+  /// Returns true if the node is marked as hidden.
+  bool isNodeHidden(PuppetNodeUuid nodeId) => _hiddenNodes.contains(nodeId);
+
+  /// Clear all hidden node overrides (make all nodes visible).
+  void clearHiddenNodes() => _hiddenNodes.clear();
 
   /// Initialize render context from puppet
   void initialize(Puppet puppet) {
@@ -239,6 +274,22 @@ class RenderCtx {
     }
   }
 
+  /// Apply manual vertex overrides to [deformedVertices] if any exist for [nodeId].
+  List<Vec2>? _applyVertexOverride(
+    PuppetNodeUuid nodeId,
+    List<Vec2>? deformedVertices,
+    NodeComponents? components,
+  ) {
+    final override = _vertexOverrides[nodeId];
+    if (override == null) return deformedVertices;
+    final base = deformedVertices ?? components?.mesh?.vertices;
+    if (base == null || override.length != base.length) return deformedVertices;
+    return List<Vec2>.generate(
+      base.length,
+      (i) => Vec2(base[i].x + override[i].x, base[i].y + override[i].y),
+    );
+  }
+
   /// Update render data (call each frame after puppet update)
   void update(Puppet puppet) {
     final transformCtx = puppet.transformCtx;
@@ -261,6 +312,8 @@ class RenderCtx {
           components.mesh!.vertices,
         );
       }
+      // Apply manual vertex overrides (mesh editor preview)
+      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,
@@ -293,6 +346,7 @@ class RenderCtx {
           components.mesh!.vertices,
         );
       }
+      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,
@@ -325,6 +379,7 @@ class RenderCtx {
           components.mesh!.vertices,
         );
       }
+      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,

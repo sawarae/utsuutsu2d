@@ -86,9 +86,17 @@ class InxParser {
     // Parse physics
     final physics = PuppetPhysics.fromJson(json['physics'] ?? {});
 
-    // Parse nodes tree
-    final nodesJson = json['nodes'] as Map<String, dynamic>? ?? {};
-    final nodes = _parseNodes(nodesJson);
+    // Parse nodes — support both utsutsu-builder format (Map) and
+    // official Inochi2D INX format (List where [0] is the root node).
+    final nodesRaw = json['nodes'];
+    final PuppetNodeTree nodes;
+    if (nodesRaw is Map<String, dynamic>) {
+      nodes = _parseNodes(nodesRaw);
+    } else if (nodesRaw is List && nodesRaw.isNotEmpty) {
+      nodes = _parseNodesFromRoot(nodesRaw[0] as Map<String, dynamic>);
+    } else {
+      nodes = _parseNodes({});
+    }
 
     // Parse parameters
     final paramsJson = json['params'] as List? ?? [];
@@ -113,6 +121,20 @@ class InxParser {
 
     // Parse children
     final childrenJson = json['children'] as List? ?? [];
+    for (final child in childrenJson) {
+      _parseNodeRecursive(child as Map<String, dynamic>, rootNode.uuid, tree);
+    }
+
+    return tree;
+  }
+
+  /// Parse nodes from official Inochi2D format where the root node is
+  /// provided directly (e.g. nodes[0]).
+  static PuppetNodeTree _parseNodesFromRoot(Map<String, dynamic> rootJson) {
+    final rootNode = _parseNode(rootJson);
+    final tree = PuppetNodeTree.withRoot(rootNode);
+
+    final childrenJson = rootJson['children'] as List? ?? [];
     for (final child in childrenJson) {
       _parseNodeRecursive(child as Map<String, dynamic>, rootNode.uuid, tree);
     }
