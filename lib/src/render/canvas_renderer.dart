@@ -1,4 +1,3 @@
-import 'dart:math' show sqrt;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:dart_psd_tool/dart_psd_tool.dart';
@@ -431,8 +430,6 @@ class CanvasRenderer {
           canvas, vertices, uvs, mesh.indices, texture,
           BlendMode.srcOver, data.drawable.opacity,
         );
-      } else {
-        _drawWireframe(canvas, vertices, mesh.indices);
       }
       canvas.restore();
 
@@ -488,7 +485,6 @@ class CanvasRenderer {
         );
       } else {
         // For normal blend mode without masks, render directly.
-        // Use reduced epsilon to minimize visible lines at mesh boundaries.
         final paint = Paint()
           ..blendMode = BlendMode.srcOver
           ..color = Colors.white.withOpacity(data.drawable.opacity)
@@ -500,11 +496,8 @@ class CanvasRenderer {
           data.mesh!.indices,
           texture,
           paint,
-          epsilon: _normalEpsilon,
         );
       }
-    } else {
-      _drawWireframe(canvas, vertices, data.mesh!.indices);
     }
 
     canvas.restore();
@@ -593,156 +586,97 @@ class CanvasRenderer {
     picture.dispose();
   }
 
+  /// Draw textured triangles using GPU-accelerated [Canvas.drawVertices].
+  ///
+  /// This delegates triangle rasterization to the GPU, which guarantees
+  /// pixel-perfect edge coverage (top-left rule) and eliminates both gap
+  /// artifacts (epsilon=0) and dark line artifacts (epsilon>0 overlap)
+  /// that plagued the old clip+affine+drawImage approach (Issue #8).
+  ///
+  /// Opacity is applied via vertex colors with [BlendMode.modulate] when
+  /// the paint's color alpha is less than 1.0.
   void _drawTexturedTriangles(
     Canvas canvas,
     List<Vec2> vertices,
     List<Vec2> uvs,
     List<int> indices,
     ui.Image texture,
-    Paint paint, {
-    double epsilon = _defaultEpsilon,
-  }) {
+    Paint paint,
+  ) {
     if (indices.length < 3) return;
 
-    // Draw textured mesh using affine-transformed texture per triangle
-    for (int i = 0; i < indices.length; i += 3) {
-      if (i + 2 >= indices.length) break;
+    // Vertices.raw requires Uint16List indices (max vertex index 65535).
+    // Typical puppet meshes have <1000 vertices; assert to catch anomalies.
+    assert(vertices.length <= 65536,
+        'drawVertices requires <= 65536 vertices, got ${vertices.length}');
 
-      final i0 = indices[i];
-      final i1 = indices[i + 1];
-      final i2 = indices[i + 2];
+    final shader = ImageShader(
+      texture,
+      TileMode.clamp,
+      TileMode.clamp,
+      _identityMatrix4,
+      filterQuality: FilterQuality.high,
+    );
 
-      if (i0 >= vertices.length ||
-          i1 >= vertices.length ||
-          i2 >= vertices.length) {
-        continue;
+    // Build vertex positions (x, y pairs in canvas coordinate space)
+    final positions = Float32List(vertices.length * 2);
+    for (int i = 0; i < vertices.length; i++) {
+      positions[i * 2] = vertices[i].x;
+      positions[i * 2 + 1] = vertices[i].y;
+    }
+
+    // Build texture coordinates in pixel space (UV × texture dimensions)
+    final texWidth = texture.width.toDouble();
+    final texHeight = texture.height.toDouble();
+    final texCoords = Float32List(uvs.length * 2);
+    for (int i = 0; i < uvs.length; i++) {
+      texCoords[i * 2] = uvs[i].x * texWidth;
+      texCoords[i * 2 + 1] = uvs[i].y * texHeight;
+    }
+
+    // Build triangle indices
+    final indexList = Uint16List.fromList(indices);
+
+    // Handle opacity via vertex colors with modulate blending.
+    // paint.color.opacity carries the drawable's opacity (set by callers).
+    // For drawVertices, we apply it through vertex colors instead.
+    final opacity = paint.color.a;
+    Int32List? colorList;
+    BlendMode vertexBlendMode = BlendMode.srcOver;
+    if (opacity < 1.0) {
+      final alpha = (opacity * 255).round().clamp(0, 255);
+      final colorValue = alpha << 24 | 0x00FFFFFF; // ARGB white with alpha
+      colorList = Int32List(vertices.length);
+      for (int i = 0; i < vertices.length; i++) {
+        colorList[i] = colorValue;
       }
-
-      _drawTexturedTriangle(
-        canvas,
-        vertices[i0],
-        vertices[i1],
-        vertices[i2],
-        uvs[i0],
-        uvs[i1],
-        uvs[i2],
-        texture,
-        paint,
-        epsilon: epsilon,
-      );
-    }
-  }
-
-  /// Default epsilon for non-normal blend modes (offscreen buffer path).
-  /// Larger value fills gaps between triangles (Issue #118).
-  static const _defaultEpsilon = 0.5;
-
-  /// Reduced epsilon for normal blend mode (direct path).
-  /// Smaller value reduces visible expansion at mesh boundaries (Issue #268).
-  static const _normalEpsilon = 0.15;
-
-  void _drawTexturedTriangle(
-    Canvas canvas,
-    Vec2 v0,
-    Vec2 v1,
-    Vec2 v2,
-    Vec2 uv0,
-    Vec2 uv1,
-    Vec2 uv2,
-    ui.Image texture,
-    Paint paint, {
-    double epsilon = _defaultEpsilon,
-  }) {
-    canvas.save();
-
-    // Expand clip path vertices by sub-pixel epsilon to close gaps between
-    // adjacent triangles. This prevents jagged "tooth" artifacts at triangle
-    // seams, especially visible in hair highlights (Issue #118).
-    // Only the clip path is expanded — texture coordinates remain unchanged.
-    // For normal blend mode, a smaller epsilon reduces visible lines at mesh
-    // boundaries (Issue #268).
-    final cx = (v0.x + v1.x + v2.x) / 3.0;
-    final cy = (v0.y + v1.y + v2.y) / 3.0;
-    final ev0 = expandVertex(v0.x, v0.y, cx, cy, epsilon);
-    final ev1 = expandVertex(v1.x, v1.y, cx, cy, epsilon);
-    final ev2 = expandVertex(v2.x, v2.y, cx, cy, epsilon);
-
-    final path = Path();
-    path.moveTo(ev0.dx, ev0.dy);
-    path.lineTo(ev1.dx, ev1.dy);
-    path.lineTo(ev2.dx, ev2.dy);
-    path.close();
-
-    canvas.clipPath(path);
-
-    // Calculate affine transform from UV coordinates to screen coordinates
-    // We need to solve for the transformation that maps:
-    // uv0 -> v0, uv1 -> v1, uv2 -> v2
-    // This is done using inverse matrix calculation
-
-    final x0 = v0.x, y0 = v0.y;
-    final x1 = v1.x, y1 = v1.y;
-    final x2 = v2.x, y2 = v2.y;
-
-    final u0 = uv0.x, v0_ = uv0.y;
-    final u1 = uv1.x, v1_ = uv1.y;
-    final u2 = uv2.x, v2_ = uv2.y;
-
-    // Compute determinant of UV basis
-    final detUV = u0 * (v1_ - v2_) + u1 * (v2_ - v0_) + u2 * (v0_ - v1_);
-    if (detUV.abs() < 1e-8) {
-      canvas.restore();
-      return;
+      vertexBlendMode = BlendMode.modulate;
     }
 
-    // Compute transformation coefficients
-    // Screen = [ a b c ] [ UV ]
-    //          [ d e f ] [ 1  ]
-    final a =
-        (x0 * (v1_ - v2_) + x1 * (v2_ - v0_) + x2 * (v0_ - v1_)) / detUV;
-    final b = (x0 * (u2 - u1) + x1 * (u0 - u2) + x2 * (u1 - u0)) / detUV;
-    final c = (x0 * (u1 * v2_ - u2 * v1_) +
-            x1 * (u2 * v0_ - u0 * v2_) +
-            x2 * (u0 * v1_ - u1 * v0_)) /
-        detUV;
+    final verts = ui.Vertices.raw(
+      VertexMode.triangles,
+      positions,
+      textureCoordinates: texCoords,
+      indices: indexList,
+      colors: colorList,
+    );
 
-    final d =
-        (y0 * (v1_ - v2_) + y1 * (v2_ - v0_) + y2 * (v0_ - v1_)) / detUV;
-    final e = (y0 * (u2 - u1) + y1 * (u0 - u2) + y2 * (u1 - u0)) / detUV;
-    final f = (y0 * (u1 * v2_ - u2 * v1_) +
-            y1 * (u2 * v0_ - u0 * v2_) +
-            y2 * (u0 * v1_ - u1 * v0_)) /
-        detUV;
+    final drawPaint = Paint()
+      ..shader = shader
+      ..blendMode = paint.blendMode;
 
-    // Scale to convert from texture pixel coordinates to UV coordinates
-    // The affine matrix transforms UV coordinates (0-1) to screen coordinates
-    // Since canvas.drawImage() uses pixel coordinates, we need to normalize them
-    // pixel_coord / dimension = UV coordinate (0-1 range)
-    // Therefore: a' = a / width, b' = b / height, etc.
-    final scaleX = 1.0 / texture.width.toDouble();
-    final scaleY = 1.0 / texture.height.toDouble();
+    canvas.drawVertices(verts, vertexBlendMode, drawPaint);
 
-    // Build transformation matrix (column-major for Flutter)
-    // [0]  [4]  [8]  [12]    [scaleX*a  scaleY*b  0  c]
-    // [1]  [5]  [9]  [13] =  [scaleX*d  scaleY*e  0  f]
-    // [2]  [6]  [10] [14]    [0         0         1  0]
-    // [3]  [7]  [11] [15]    [0         0         0  1]
-    final matrix = Float64List(16);
-    matrix[0] = a * scaleX;
-    matrix[1] = d * scaleX;
-    matrix[4] = b * scaleY;
-    matrix[5] = e * scaleY;
-    matrix[12] = c;
-    matrix[13] = f;
-    matrix[10] = 1.0;
-    matrix[15] = 1.0;
-
-    // Apply transform and draw texture
-    canvas.transform(matrix);
-    canvas.drawImage(texture, Offset.zero, paint);
-
-    canvas.restore();
+    verts.dispose();
+    shader.dispose();
   }
+
+  /// Identity matrix for [ImageShader] (shared, never mutated).
+  static final _identityMatrix4 = Float64List(16)
+    ..[0] = 1.0
+    ..[5] = 1.0
+    ..[10] = 1.0
+    ..[15] = 1.0;
 
   void _drawWireframe(Canvas canvas, List<Vec2> vertices, List<int> indices) {
     final paint = Paint()
@@ -1131,24 +1065,6 @@ class CanvasRenderer {
       matrix4[i] = transform[i];
     }
     canvas.transform(matrix4);
-  }
-
-  /// Expand vertex position away from centroid by [epsilon] pixels.
-  ///
-  /// Used to close sub-pixel gaps between adjacent clip-path triangles
-  /// that cause jagged "tooth" artifacts in hair highlights (Issue #118).
-  /// Only the clip path is expanded; texture coordinates remain unchanged.
-  @visibleForTesting
-  static Offset expandVertex(
-      double vx, double vy, double cx, double cy, double epsilon) {
-    final dx = vx - cx;
-    final dy = vy - cy;
-    final len = sqrt(dx * dx + dy * dy);
-    if (len < 1e-10) return Offset(vx, vy);
-    return Offset(
-      vx + dx / len * epsilon,
-      vy + dy / len * epsilon,
-    );
   }
 
   /// Convert puppet blend mode to Flutter BlendMode.
