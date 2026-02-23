@@ -130,10 +130,11 @@ class Drawable {
       blendMode: _parseBlendMode(json['blend_mode']),
       opacity: (json['opacity'] ?? 1.0).toDouble(),
       masks: parsedMasks,
-      // Inochi2D defaults mask threshold to 0.5 when masks are present.
+      // Keep soft mask edges when threshold is omitted in source data.
+      // A high implicit threshold can create visible seams on thin facial parts.
       maskThreshold: json.containsKey('mask_threshold')
           ? json['mask_threshold']?.toDouble()
-          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.5 : null),
+          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.0 : null),
     );
   }
 

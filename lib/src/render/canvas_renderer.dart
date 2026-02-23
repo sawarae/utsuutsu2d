@@ -183,7 +183,7 @@ class CanvasRenderer {
       // 2. Render combined mask image offscreen
       final maskImage = _renderMaskImage(
         data.drawable.masks!,
-        data.drawable.maskThreshold ?? 0.5,
+        data.drawable.maskThreshold ?? 0.0,
         snappedBounds,
       );
       if (maskImage == null) {
@@ -833,7 +833,35 @@ class CanvasRenderer {
       }
     }
 
-    return combinedMask;
+    if (combinedMask == null) return null;
+
+    // Canvas dstIn masking can shrink the effective mask by sub-pixel amount
+    // compared to stencil-based GL masking. Expand mask coverage by 1px to
+    // avoid dark seam lines on tightly clipped facial parts.
+    final expanded = _expandMaskImage(combinedMask, width, height);
+    combinedMask.dispose();
+    return expanded;
+  }
+
+  /// Expand mask alpha coverage by 1px using additive offsets.
+  ui.Image _expandMaskImage(ui.Image source, int width, int height) {
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..blendMode = BlendMode.plus;
+    const offsets = <Offset>[
+      Offset(0, 0),
+      Offset(1, 0),
+      Offset(-1, 0),
+      Offset(0, 1),
+      Offset(0, -1),
+    ];
+    for (final o in offsets) {
+      canvas.drawImage(source, o, paint);
+    }
+    final picture = recorder.endRecording();
+    final result = picture.toImageSync(width, height);
+    picture.dispose();
+    return result;
   }
 
   /// Apply alpha threshold to a mask image.

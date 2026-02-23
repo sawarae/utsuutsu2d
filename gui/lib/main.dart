@@ -51,11 +51,28 @@ Uint8List _decodeTgaToPng(Uint8List data) {
   img.Image? decodedImage = img.decodeTga(data);
   decodedImage ??= img.decodeImage(data);
   if (decodedImage == null) return Uint8List(0);
+  _unpremultiplyAlpha(decodedImage);
   if (!_disableTextureBleed) {
     _bleedTransparentPixels(decodedImage);
     _normalizeLowAlphaEdgeColors(decodedImage);
   }
   return Uint8List.fromList(img.encodePng(decodedImage));
+}
+
+void _unpremultiplyAlpha(img.Image image) {
+  final w = image.width;
+  final h = image.height;
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      final p = image.getPixel(x, y);
+      final a = p.a.toInt();
+      if (a <= 0 || a >= 255) continue;
+      final r = (p.r * 255.0 / a).round().clamp(0, 255);
+      final g = (p.g * 255.0 / a).round().clamp(0, 255);
+      final b = (p.b * 255.0 / a).round().clamp(0, 255);
+      image.setPixelRgba(x, y, r, g, b, a);
+    }
+  }
 }
 
 void _normalizeLowAlphaEdgeColors(
