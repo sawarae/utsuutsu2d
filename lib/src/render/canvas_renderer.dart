@@ -7,6 +7,13 @@ import '../math/math.dart';
 import '../components/drawable.dart' as puppet;
 import 'render_ctx.dart';
 
+const bool _inoxLikeNoClipExpand =
+    bool.fromEnvironment('INOX_LIKE_NO_CLIP_EXPAND');
+const bool _inoxLikeNearestSampling =
+    bool.fromEnvironment('INOX_LIKE_NEAREST_SAMPLING');
+const bool _useLegacyTriangleClip =
+    bool.fromEnvironment('USE_LEGACY_TRIANGLE_CLIP');
+
 /// Canvas-based renderer for puppets
 class CanvasRenderer {
   final RenderCtx renderCtx;
@@ -94,6 +101,9 @@ class CanvasRenderer {
   // Debug counter for logging
   static int _debugDrawCount = 0;
   static bool _debugLogged = false;
+
+  FilterQuality get _filterQuality =>
+      _inoxLikeNearestSampling ? FilterQuality.none : FilterQuality.high;
 
   void _drawTexturedMesh(Canvas canvas, RenderData data) {
     final mesh = data.mesh;
@@ -241,7 +251,7 @@ class CanvasRenderer {
         final paint = Paint()
           ..blendMode = BlendMode.srcOver
           ..color = Colors.white.withOpacity(data.drawable.opacity)
-          ..filterQuality = FilterQuality.high;
+          ..filterQuality = _filterQuality;
         _drawTexturedTriangles(
           canvas,
           vertices,
@@ -316,7 +326,7 @@ class CanvasRenderer {
     // Do NOT apply opacity here - it will be applied at composite time
     final trianglePaint = Paint()
       ..blendMode = BlendMode.srcOver
-      ..filterQuality = FilterQuality.high;
+      ..filterQuality = _filterQuality;
 
     _drawTexturedTriangles(
       offscreenCanvas,
@@ -360,6 +370,54 @@ class CanvasRenderer {
     Paint paint,
   ) {
     if (indices.length < 3) return;
+
+    if (!_useLegacyTriangleClip) {
+      // Inox2D-like path: submit the full mesh once with texture coordinates.
+      // This avoids per-triangle clip edges that can cause fringe lines.
+      final positions = Float32List(vertices.length * 2);
+      final texCoords = Float32List(uvs.length * 2);
+      for (int i = 0; i < vertices.length; i++) {
+        positions[i * 2] = vertices[i].x.toDouble();
+        positions[i * 2 + 1] = vertices[i].y.toDouble();
+      }
+      for (int i = 0; i < uvs.length; i++) {
+        texCoords[i * 2] = (uvs[i].x * texture.width).toDouble();
+        texCoords[i * 2 + 1] = (uvs[i].y * texture.height).toDouble();
+      }
+
+      final safeIndices = Uint16List.fromList(
+        indices.where((i) => i >= 0 && i < vertices.length).toList(),
+      );
+      if (safeIndices.length < 3) return;
+
+      final mesh = ui.Vertices.raw(
+        ui.VertexMode.triangles,
+        positions,
+        textureCoordinates: texCoords,
+        indices: safeIndices,
+      );
+
+      final shader = ui.ImageShader(
+        texture,
+        TileMode.clamp,
+        TileMode.clamp,
+        Float64List.fromList(<double>[
+          1, 0, 0, 0,
+          0, 1, 0, 0,
+          0, 0, 1, 0,
+          0, 0, 0, 1,
+        ]),
+        filterQuality: _filterQuality,
+      );
+      final texturedPaint = Paint()
+        ..blendMode = paint.blendMode
+        ..color = paint.color
+        ..filterQuality = _filterQuality
+        ..shader = shader;
+
+      canvas.drawVertices(mesh, BlendMode.modulate, texturedPaint);
+      return;
+    }
 
     // Draw textured mesh using affine-transformed texture per triangle
     for (int i = 0; i < indices.length; i += 3) {
@@ -406,7 +464,9 @@ class CanvasRenderer {
     // adjacent triangles. This prevents jagged "tooth" artifacts at triangle
     // seams, especially visible in hair highlights (Issue #118).
     // Only the clip path is expanded — texture coordinates remain unchanged.
-    const epsilon = 0.5;
+    // Too-large expansion can sample outside intended edge texels and cause
+    // dark fringe lines on thin facial parts (e.g. mouth outlines).
+    final epsilon = _inoxLikeNoClipExpand ? 0.0 : 0.1;
     final cx = (v0.x + v1.x + v2.x) / 3.0;
     final cy = (v0.y + v1.y + v2.y) / 3.0;
     final ev0 = expandVertex(v0.x, v0.y, cx, cy, epsilon);
@@ -689,7 +749,7 @@ class CanvasRenderer {
       // Render the textured mesh with normal blending
       final paint = Paint()
         ..blendMode = BlendMode.srcOver
-        ..filterQuality = FilterQuality.high;
+        ..filterQuality = _filterQuality;
       _drawTexturedTriangles(
         offCanvas,
         sourceVertices,
