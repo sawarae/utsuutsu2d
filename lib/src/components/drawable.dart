@@ -117,18 +117,23 @@ class Drawable {
   }
 
   factory Drawable.fromJson(Map<String, dynamic> json) {
+    final parsedMasks = json['masks'] != null
+        ? (json['masks'] as List)
+            .map((m) => Mask(
+                  sourceNodeId: m['source'],
+                  mode: m['mode'] == 'dodge' ? MaskMode.dodge : MaskMode.mask,
+                ))
+            .toList()
+        : null;
+
     return Drawable(
       blendMode: _parseBlendMode(json['blend_mode']),
       opacity: (json['opacity'] ?? 1.0).toDouble(),
-      masks: json['masks'] != null
-          ? (json['masks'] as List)
-              .map((m) => Mask(
-                    sourceNodeId: m['source'],
-                    mode: m['mode'] == 'dodge' ? MaskMode.dodge : MaskMode.mask,
-                  ))
-              .toList()
-          : null,
-      maskThreshold: json['mask_threshold']?.toDouble(),
+      masks: parsedMasks,
+      // Inochi2D defaults mask threshold to 0.5 when masks are present.
+      maskThreshold: json.containsKey('mask_threshold')
+          ? json['mask_threshold']?.toDouble()
+          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.5 : null),
     );
   }
 

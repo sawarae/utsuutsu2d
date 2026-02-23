@@ -41,7 +41,8 @@ class CanvasRenderer {
       );
       print('[CanvasRenderer] GPU mask threshold shader loaded');
     } catch (e) {
-      print('[CanvasRenderer] Shader load failed, using ColorFilter fallback: $e');
+      print(
+          '[CanvasRenderer] Shader load failed, using ColorFilter fallback: $e');
       _maskShaderProgram = null;
     }
   }
@@ -126,7 +127,8 @@ class CanvasRenderer {
       texture = renderCtx.getTexture(texturedMesh!.albedoTextureId!);
 
       // If using atlas, transform UVs
-      final atlasRegion = renderCtx.getAtlasRegion(texturedMesh.albedoTextureId!);
+      final atlasRegion =
+          renderCtx.getAtlasRegion(texturedMesh.albedoTextureId!);
       if (atlasRegion != null && mesh.uvs.isNotEmpty) {
         atlasUvs = mesh.uvs.map((uv) => atlasRegion.transformUV(uv)).toList();
       }
@@ -148,39 +150,53 @@ class CanvasRenderer {
     final hasMasks = data.drawable.hasMasks;
     if (hasMasks) {
       // 1. Compute bounding box of the drawable in world space
-      final drawableBounds = _computeTransformedBounds(vertices, data.transform);
+      final drawableBounds =
+          _computeTransformedBounds(vertices, data.transform);
 
       // Expand bounds to include mask sources
       var combinedBounds = drawableBounds;
       for (final mask in data.drawable.masks!) {
         final sourceData = renderCtx.getRenderData(mask.sourceNodeId);
         if (sourceData == null || sourceData.mesh == null) continue;
-        final sourceVerts = sourceData.deformedVertices ?? sourceData.mesh!.vertices;
+        final sourceVerts =
+            sourceData.deformedVertices ?? sourceData.mesh!.vertices;
         if (sourceVerts.isEmpty) continue;
-        final maskBounds = _computeTransformedBounds(sourceVerts, sourceData.transform);
+        final maskBounds =
+            _computeTransformedBounds(sourceVerts, sourceData.transform);
         combinedBounds = combinedBounds.expandToInclude(maskBounds);
       }
 
-      final width = combinedBounds.width.ceil();
-      final height = combinedBounds.height.ceil();
+      // Snap mask bounds to integer pixel grid to avoid sub-pixel resampling
+      // when drawing the offscreen mask image back to the main canvas.
+      // Fractional offsets here can introduce fringe outlines on masked parts.
+      final snappedBounds = Rect.fromLTRB(
+        combinedBounds.left.floorToDouble(),
+        combinedBounds.top.floorToDouble(),
+        combinedBounds.right.ceilToDouble(),
+        combinedBounds.bottom.ceilToDouble(),
+      );
+
+      final width = snappedBounds.width.ceil();
+      final height = snappedBounds.height.ceil();
       if (width <= 0 || height <= 0) return;
 
       // 2. Render combined mask image offscreen
       final maskImage = _renderMaskImage(
         data.drawable.masks!,
-        data.drawable.maskThreshold ?? 0.0,
-        combinedBounds,
+        data.drawable.maskThreshold ?? 0.5,
+        snappedBounds,
       );
       if (maskImage == null) {
         // No valid mask sources — draw content without masking
-        _drawTexturedMeshContent(canvas, data, vertices, texture, atlasUvs, blendMode);
+        _drawTexturedMeshContent(
+            canvas, data, vertices, texture, atlasUvs, blendMode);
         return;
       }
 
       // 3. Render the drawable content to a saveLayer, then apply mask via dstIn
       canvas.save();
       final layerPaint = Paint()..blendMode = blendMode;
-      canvas.saveLayer(combinedBounds, layerPaint);
+      canvas.saveLayer(snappedBounds, layerPaint);
 
       // Draw the actual content
       canvas.save();
@@ -188,8 +204,13 @@ class CanvasRenderer {
       if (texture != null) {
         final uvs = atlasUvs ?? mesh.uvs;
         _drawTexturedMeshWithBlending(
-          canvas, vertices, uvs, mesh.indices, texture,
-          BlendMode.srcOver, data.drawable.opacity,
+          canvas,
+          vertices,
+          uvs,
+          mesh.indices,
+          texture,
+          BlendMode.srcOver,
+          data.drawable.opacity,
         );
       } else {
         _drawWireframe(canvas, vertices, mesh.indices);
@@ -199,7 +220,7 @@ class CanvasRenderer {
       // 4. Apply mask using dstIn (keeps content only where mask is opaque)
       canvas.drawImage(
         maskImage,
-        Offset(combinedBounds.left, combinedBounds.top),
+        Offset(snappedBounds.left, snappedBounds.top),
         Paint()..blendMode = BlendMode.dstIn,
       );
       canvas.restore(); // restore saveLayer
@@ -207,7 +228,8 @@ class CanvasRenderer {
 
       maskImage.dispose();
     } else {
-      _drawTexturedMeshContent(canvas, data, vertices, texture, atlasUvs, blendMode);
+      _drawTexturedMeshContent(
+          canvas, data, vertices, texture, atlasUvs, blendMode);
     }
   }
 
@@ -402,10 +424,22 @@ class CanvasRenderer {
         TileMode.clamp,
         TileMode.clamp,
         Float64List.fromList(<double>[
-          1, 0, 0, 0,
-          0, 1, 0, 0,
-          0, 0, 1, 0,
-          0, 0, 0, 1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          1,
         ]),
         filterQuality: _filterQuality,
       );
@@ -504,16 +538,14 @@ class CanvasRenderer {
     // Compute transformation coefficients
     // Screen = [ a b c ] [ UV ]
     //          [ d e f ] [ 1  ]
-    final a =
-        (x0 * (v1_ - v2_) + x1 * (v2_ - v0_) + x2 * (v0_ - v1_)) / detUV;
+    final a = (x0 * (v1_ - v2_) + x1 * (v2_ - v0_) + x2 * (v0_ - v1_)) / detUV;
     final b = (x0 * (u2 - u1) + x1 * (u0 - u2) + x2 * (u1 - u0)) / detUV;
     final c = (x0 * (u1 * v2_ - u2 * v1_) +
             x1 * (u2 * v0_ - u0 * v2_) +
             x2 * (u0 * v1_ - u1 * v0_)) /
         detUV;
 
-    final d =
-        (y0 * (v1_ - v2_) + y1 * (v2_ - v0_) + y2 * (v0_ - v1_)) / detUV;
+    final d = (y0 * (v1_ - v2_) + y1 * (v2_ - v0_) + y2 * (v0_ - v1_)) / detUV;
     final e = (y0 * (u2 - u1) + y1 * (u0 - u2) + y2 * (u1 - u0)) / detUV;
     final f = (y0 * (u1 * v2_ - u2 * v1_) +
             y1 * (u2 * v0_ - u0 * v2_) +
@@ -724,8 +756,8 @@ class CanvasRenderer {
       if (sourceData.texturedMesh?.albedoTextureId != null) {
         sourceTexture =
             renderCtx.getTexture(sourceData.texturedMesh!.albedoTextureId!);
-        final atlasRegion = renderCtx
-            .getAtlasRegion(sourceData.texturedMesh!.albedoTextureId!);
+        final atlasRegion =
+            renderCtx.getAtlasRegion(sourceData.texturedMesh!.albedoTextureId!);
         if (atlasRegion != null && sourceData.mesh!.uvs.isNotEmpty) {
           sourceAtlasUvs = sourceData.mesh!.uvs
               .map((uv) => atlasRegion.transformUV(uv))
@@ -818,9 +850,11 @@ class CanvasRenderer {
     bool invert = false,
   }) {
     if (_maskShaderProgram != null) {
-      return _applyThresholdWithShader(source, threshold, width, height, invert: invert);
+      return _applyThresholdWithShader(source, threshold, width, height,
+          invert: invert);
     }
-    return _applyThresholdWithColorFilter(source, threshold, width, height, invert: invert);
+    return _applyThresholdWithColorFilter(source, threshold, width, height,
+        invert: invert);
   }
 
   /// GPU path: apply threshold using fragment shader with step function.
@@ -888,7 +922,8 @@ class CanvasRenderer {
       //   scale = 1 / (1 - threshold)
       //   offset = -threshold / (1 - threshold) * 255
       final scale = threshold >= 1.0 ? 255.0 : 1.0 / (1.0 - threshold);
-      final offset = threshold >= 1.0 ? -255.0 : -threshold * 255.0 / (1.0 - threshold);
+      final offset =
+          threshold >= 1.0 ? -255.0 : -threshold * 255.0 / (1.0 - threshold);
 
       if (!invert) {
         final paint = Paint()
