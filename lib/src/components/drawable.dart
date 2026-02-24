@@ -137,7 +137,7 @@ class Drawable {
       // 適度に高めの既定値を与える（0.30）。モデル側で上書き可能。
       maskThreshold: json.containsKey('mask_threshold')
           ? json['mask_threshold']?.toDouble()
-          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.30 : null),
+          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.45 : null),
     );
   }
 
