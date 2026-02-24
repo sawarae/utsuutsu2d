@@ -132,9 +132,12 @@ class Drawable {
       masks: parsedMasks,
       // Keep soft mask edges when threshold is omitted in source data.
       // A high implicit threshold can create visible seams on thin facial parts.
+      // Default threshold: keep soft edges but suppress very thin artifacts.
+      // Ubuntu 側で薄い鼻影が落ちていた挙動に合わせ、明示指定が無い場合は
+      // 適度に高めの既定値を与える（0.30）。モデル側で上書き可能。
       maskThreshold: json.containsKey('mask_threshold')
           ? json['mask_threshold']?.toDouble()
-          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.0 : null),
+          : (parsedMasks != null && parsedMasks.isNotEmpty ? 0.30 : null),
     );
   }
 
