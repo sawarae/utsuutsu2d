@@ -15,8 +15,11 @@ void main() {
     float alpha = color.a;
     alpha = mix(alpha, 1.0 - alpha, invert);  // dodge mode
 
-    // Sharp threshold (step function) — matches inox2d's "discard when alpha <= threshold"
-    float mask = step(threshold + 0.0001, alpha);
+    // Keep soft mask edges and only suppress values below threshold.
+    // This matches the CPU/color-filter path:
+    //   out = clamp((alpha - threshold) / (1 - threshold), 0, 1)
+    float t = clamp(threshold, 0.0, 0.9999);
+    float mask = clamp((alpha - t) / (1.0 - t), 0.0, 1.0);
 
     fragColor = vec4(1.0, 1.0, 1.0, mask);
 }

@@ -115,7 +115,8 @@ class _Parameter2DPadState extends State<Parameter2DPad> {
     return ListenableBuilder(
       listenable: widget.controller,
       builder: (context, child) {
-        final value = widget.controller.puppet?.getParamValue(widget.param.name);
+        final value =
+            widget.controller.puppet?.getParamValue(widget.param.name);
         final currentValue = value ?? widget.param.defaultValue;
 
         // Normalize to 0-1 range
@@ -178,10 +179,10 @@ class _Parameter2DPadState extends State<Parameter2DPad> {
     final normalizedY = (position.dy / widget.size).clamp(0.0, 1.0);
 
     // Convert to parameter value
-    final valueX = param.minValue.x +
-        normalizedX * (param.maxValue.x - param.minValue.x);
-    final valueY = param.minValue.y +
-        normalizedY * (param.maxValue.y - param.minValue.y);
+    final valueX =
+        param.minValue.x + normalizedX * (param.maxValue.x - param.minValue.x);
+    final valueY =
+        param.minValue.y + normalizedY * (param.maxValue.y - param.minValue.y);
 
     widget.controller.setParameter(param.name, valueX, valueY);
   }
