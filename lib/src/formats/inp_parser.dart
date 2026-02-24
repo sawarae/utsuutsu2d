@@ -11,9 +11,36 @@ import 'binary_reader.dart';
 /// INP file format parser
 class InpParser {
   // TRNSRTS binary format magic constants
-  static const _trnsrtsMagic = [0x54, 0x52, 0x4E, 0x53, 0x52, 0x54, 0x53, 0x00]; // "TRNSRTS\0"
-  static const _texSectMagic = [0x54, 0x45, 0x58, 0x5F, 0x53, 0x45, 0x43, 0x54]; // "TEX_SECT"
-  static const _extSectMagic = [0x45, 0x58, 0x54, 0x5F, 0x53, 0x45, 0x43, 0x54]; // "EXT_SECT"
+  static const _trnsrtsMagic = [
+    0x54,
+    0x52,
+    0x4E,
+    0x53,
+    0x52,
+    0x54,
+    0x53,
+    0x00
+  ]; // "TRNSRTS\0"
+  static const _texSectMagic = [
+    0x54,
+    0x45,
+    0x58,
+    0x5F,
+    0x53,
+    0x45,
+    0x43,
+    0x54
+  ]; // "TEX_SECT"
+  static const _extSectMagic = [
+    0x45,
+    0x58,
+    0x54,
+    0x5F,
+    0x53,
+    0x45,
+    0x43,
+    0x54
+  ]; // "EXT_SECT"
 
   /// Load model from bytes
   static Model parse(Uint8List bytes) {
@@ -119,7 +146,8 @@ class InpParser {
             final payloadStr = utf8.decode(payloadBytes);
             final payload = jsonDecode(payloadStr) as Map<String, dynamic>;
 
-            vendorData.add(VendorData.fromJson({'name': name, 'payload': payload}));
+            vendorData
+                .add(VendorData.fromJson({'name': name, 'payload': payload}));
           }
         }
       } catch (_) {
@@ -236,14 +264,17 @@ class InpParser {
         final values = entry.value as Map<String, dynamic>? ?? {};
         if (values.containsKey('paramValues')) {
           // New format: extract paramValues (and merge paramValuesY if present)
-          final paramValues = values['paramValues'] as Map<String, dynamic>? ?? {};
-          final paramValuesY = values['paramValuesY'] as Map<String, dynamic>? ?? {};
+          final paramValues =
+              values['paramValues'] as Map<String, dynamic>? ?? {};
+          final paramValuesY =
+              values['paramValuesY'] as Map<String, dynamic>? ?? {};
           final merged = <String, double>{};
           for (final pv in paramValues.entries) {
             if (pv.value is num) merged[pv.key] = (pv.value as num).toDouble();
           }
           for (final pv in paramValuesY.entries) {
-            if (pv.value is num) merged['${pv.key}_y'] = (pv.value as num).toDouble();
+            if (pv.value is num)
+              merged['${pv.key}_y'] = (pv.value as num).toDouble();
           }
           expressions[entry.key] = merged;
         } else {
@@ -271,8 +302,8 @@ class InpParser {
 
   static PuppetNodeTree _parseNodes(Map<String, dynamic> json) {
     // Create root node
-    final rootJson = json['root'] as Map<String, dynamic>? ??
-        {'uuid': 0, 'name': 'root'};
+    final rootJson =
+        json['root'] as Map<String, dynamic>? ?? {'uuid': 0, 'name': 'root'};
     final rootNode = _parseNode(rootJson);
     final tree = PuppetNodeTree.withRoot(rootNode);
 
@@ -342,7 +373,8 @@ class InpParser {
 
     // Debug: count node types
     _nodeTypeCounts[type] = (_nodeTypeCounts[type] ?? 0) + 1;
-    if (!_nodeTypeLogged && _nodeTypeCounts.values.fold(0, (a, b) => a + b) >= 100) {
+    if (!_nodeTypeLogged &&
+        _nodeTypeCounts.values.fold(0, (a, b) => a + b) >= 100) {
       print('[Parser] Node type counts: $_nodeTypeCounts');
       _nodeTypeLogged = true;
     }

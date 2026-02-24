@@ -17,10 +17,10 @@ const bool _autoScreenshot = bool.fromEnvironment('AUTO_SCREENSHOT');
 const String? _screenshotPath = String.fromEnvironment('SCREENSHOT_PATH') != ''
     ? String.fromEnvironment('SCREENSHOT_PATH')
     : null;
-const String? _screenshotMode =
-    String.fromEnvironment('SCREENSHOT_MODE') != ''
-        ? String.fromEnvironment('SCREENSHOT_MODE')
-        : null;
+const String? _screenshotMode = String.fromEnvironment('SCREENSHOT_MODE') != ''
+    ? String.fromEnvironment('SCREENSHOT_MODE')
+    : null;
+const bool _disableTextureBleed = bool.fromEnvironment('DISABLE_TEXTURE_BLEED');
 const String _zoomLevelStr = String.fromEnvironment('ZOOM_LEVEL');
 const String _cameraXStr = String.fromEnvironment('CAMERA_X');
 const String _cameraYStr = String.fromEnvironment('CAMERA_Y');
@@ -51,7 +51,178 @@ Uint8List _decodeTgaToPng(Uint8List data) {
   img.Image? decodedImage = img.decodeTga(data);
   decodedImage ??= img.decodeImage(data);
   if (decodedImage == null) return Uint8List(0);
+  _unpremultiplyAlpha(decodedImage);
+  _clearOuterBorderAlpha(decodedImage, borderPixels: 1);
+  if (!_disableTextureBleed) {
+    _bleedTransparentPixels(decodedImage);
+    _normalizeLowAlphaEdgeColors(decodedImage);
+  }
+  _stripTinyAlphaNoise(decodedImage);
   return Uint8List.fromList(img.encodePng(decodedImage));
+}
+
+void _unpremultiplyAlpha(img.Image image) {
+  final w = image.width;
+  final h = image.height;
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      final p = image.getPixel(x, y);
+      final a = p.a.toInt();
+      if (a <= 0 || a >= 255) continue;
+      final r = (p.r * 255.0 / a).round().clamp(0, 255);
+      final g = (p.g * 255.0 / a).round().clamp(0, 255);
+      final b = (p.b * 255.0 / a).round().clamp(0, 255);
+      image.setPixelRgba(x, y, r, g, b, a);
+    }
+  }
+}
+
+void _stripTinyAlphaNoise(img.Image image, {int alphaCutoff = 2}) {
+  if (alphaCutoff <= 0) return;
+  final w = image.width;
+  final h = image.height;
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      final p = image.getPixel(x, y);
+      final a = p.a.toInt();
+      if (a > 0 && a <= alphaCutoff) {
+        image.setPixelRgba(x, y, 0, 0, 0, 0);
+      }
+    }
+  }
+}
+
+void _clearOuterBorderAlpha(img.Image image, {int borderPixels = 1}) {
+  if (borderPixels <= 0) return;
+  final w = image.width;
+  final h = image.height;
+  final b = borderPixels;
+  for (int y = 0; y < h; y++) {
+    for (int x = 0; x < w; x++) {
+      if (x < b || y < b || x >= w - b || y >= h - b) {
+        image.setPixelRgba(x, y, 0, 0, 0, 0);
+      }
+    }
+  }
+}
+
+void _normalizeLowAlphaEdgeColors(
+  img.Image image, {
+  int alphaThreshold = 32,
+  int iterations = 2,
+}) {
+  if (iterations <= 0) return;
+
+  final w = image.width;
+  final h = image.height;
+
+  for (int iter = 0; iter < iterations; iter++) {
+    final prev = Uint8List.fromList(
+      image.getBytes(order: img.ChannelOrder.rgba),
+    );
+
+    bool changed = false;
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final idx = (y * w + x) * 4;
+        final a = prev[idx + 3];
+        if (a == 0 || a > alphaThreshold) continue;
+
+        int sumR = 0;
+        int sumG = 0;
+        int sumB = 0;
+        int weight = 0;
+
+        for (int dy = -1; dy <= 1; dy++) {
+          final ny = y + dy;
+          if (ny < 0 || ny >= h) continue;
+          for (int dx = -1; dx <= 1; dx++) {
+            final nx = x + dx;
+            if (nx < 0 || nx >= w || (dx == 0 && dy == 0)) continue;
+
+            final nIdx = (ny * w + nx) * 4;
+            final na = prev[nIdx + 3];
+            if (na <= a) continue;
+
+            sumR += prev[nIdx] * na;
+            sumG += prev[nIdx + 1] * na;
+            sumB += prev[nIdx + 2] * na;
+            weight += na;
+          }
+        }
+
+        if (weight == 0) continue;
+        image.setPixelRgba(
+          x,
+          y,
+          (sumR / weight).round(),
+          (sumG / weight).round(),
+          (sumB / weight).round(),
+          a,
+        );
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
+}
+
+void _bleedTransparentPixels(img.Image image, {int iterations = 2}) {
+  if (iterations <= 0) return;
+
+  final w = image.width;
+  final h = image.height;
+
+  for (int iter = 0; iter < iterations; iter++) {
+    final prev = Uint8List.fromList(
+      image.getBytes(order: img.ChannelOrder.rgba),
+    );
+
+    bool changed = false;
+    for (int y = 0; y < h; y++) {
+      for (int x = 0; x < w; x++) {
+        final idx = (y * w + x) * 4;
+        if (prev[idx + 3] != 0) continue;
+
+        int sumR = 0;
+        int sumG = 0;
+        int sumB = 0;
+        int weight = 0;
+
+        for (int dy = -1; dy <= 1; dy++) {
+          final ny = y + dy;
+          if (ny < 0 || ny >= h) continue;
+          for (int dx = -1; dx <= 1; dx++) {
+            final nx = x + dx;
+            if (nx < 0 || nx >= w || (dx == 0 && dy == 0)) continue;
+
+            final nIdx = (ny * w + nx) * 4;
+            final na = prev[nIdx + 3];
+            if (na == 0) continue;
+
+            sumR += prev[nIdx] * na;
+            sumG += prev[nIdx + 1] * na;
+            sumB += prev[nIdx + 2] * na;
+            weight += na;
+          }
+        }
+
+        if (weight == 0) continue;
+        image.setPixelRgba(
+          x,
+          y,
+          (sumR / weight).round(),
+          (sumG / weight).round(),
+          (sumB / weight).round(),
+          0,
+        );
+        changed = true;
+      }
+    }
+
+    if (!changed) break;
+  }
 }
 
 void main(List<String> args) async {
@@ -99,8 +270,7 @@ class ViewerPage extends StatefulWidget {
   State<ViewerPage> createState() => _ViewerPageState();
 }
 
-class _ViewerPageState extends State<ViewerPage>
-    with TickerProviderStateMixin {
+class _ViewerPageState extends State<ViewerPage> with TickerProviderStateMixin {
   PuppetController? _controller;
   String? _errorMessage;
   bool _isLoading = false;
@@ -268,11 +438,13 @@ class _ViewerPageState extends State<ViewerPage>
       final outputPath =
           path ?? 'screenshot_${DateTime.now().millisecondsSinceEpoch}.png';
       final cam = _controller?.camera;
-      debugPrint('Camera: zoom=${cam?.zoom} pos=(${cam?.position.x}, ${cam?.position.y})');
+      debugPrint(
+          'Camera: zoom=${cam?.zoom} pos=(${cam?.position.x}, ${cam?.position.y})');
       debugPrint('Widget size: ${boundary.size}');
       final file = File(outputPath);
       await file.writeAsBytes(byteData.buffer.asUint8List());
-      debugPrint('Screenshot saved: $outputPath (${image.width}x${image.height})');
+      debugPrint(
+          'Screenshot saved: $outputPath (${image.width}x${image.height})');
     } catch (e) {
       debugPrint('Error saving screenshot: $e');
     }
@@ -369,8 +541,8 @@ class _ViewerPageState extends State<ViewerPage>
         actions: [
           if (_controller != null) ...[
             IconButton(
-              icon: Icon(
-                  _controller!.isPlaying ? Icons.pause : Icons.play_arrow),
+              icon:
+                  Icon(_controller!.isPlaying ? Icons.pause : Icons.play_arrow),
               onPressed: () {
                 _controller!.togglePlay(this);
                 setState(() {});
@@ -543,8 +715,7 @@ class _ViewerPageState extends State<ViewerPage>
                   return ChoiceChip(
                     label: Text(entry.key),
                     selected: isActive,
-                    onSelected: (_) =>
-                        _applyExpression(entry.key, entry.value),
+                    onSelected: (_) => _applyExpression(entry.key, entry.value),
                   );
                 }).toList(),
               ),

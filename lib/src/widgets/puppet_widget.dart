@@ -508,10 +508,11 @@ class _PuppetWidgetState extends State<PuppetWidget>
 
     // Pan
     final delta = details.focalPoint - _lastFocalPoint!;
-    camera.position = camera.position - Vec2(
-      delta.dx / camera.zoom,
-      delta.dy / camera.zoom,
-    );
+    camera.position = camera.position -
+        Vec2(
+          delta.dx / camera.zoom,
+          delta.dy / camera.zoom,
+        );
 
     // Zoom
     if (details.scale != 1.0) {

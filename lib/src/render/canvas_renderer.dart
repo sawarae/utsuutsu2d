@@ -112,8 +112,7 @@ class CanvasRenderer {
   /// accumulated in a batch (PictureRecorder). When a non-normal textured
   /// mesh is encountered, the batch is flushed and the mesh is composited
   /// using the PSD fragment shader for exact 3-component alpha blending.
-  void _renderWithPsdCompositor(
-      Canvas targetCanvas, Size size, Puppet puppet) {
+  void _renderWithPsdCompositor(Canvas targetCanvas, Size size, Puppet puppet) {
     final dpr = devicePixelRatio;
     final pw = (size.width * dpr).ceil();
     final ph = (size.height * dpr).ceil();
@@ -271,8 +270,7 @@ class CanvasRenderer {
       final atlasRegion =
           renderCtx.getAtlasRegion(data.texturedMesh!.albedoTextureId!);
       if (atlasRegion != null && mesh.uvs.isNotEmpty) {
-        atlasUvs =
-            mesh.uvs.map((uv) => atlasRegion.transformUV(uv)).toList();
+        atlasUvs = mesh.uvs.map((uv) => atlasRegion.transformUV(uv)).toList();
       }
     }
     if (texture == null) return null;
@@ -285,8 +283,8 @@ class CanvasRenderer {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.scale(dpr, dpr);
-    _applyMatrix(canvas,
-        camera.viewProjectionMatrix(size.width, size.height), size);
+    _applyMatrix(
+        canvas, camera.viewProjectionMatrix(size.width, size.height), size);
     canvas.save();
     _applyNodeTransform(canvas, data.transform);
 
@@ -372,7 +370,8 @@ class CanvasRenderer {
       texture = renderCtx.getTexture(texturedMesh!.albedoTextureId!);
 
       // If using atlas, transform UVs
-      final atlasRegion = renderCtx.getAtlasRegion(texturedMesh.albedoTextureId!);
+      final atlasRegion =
+          renderCtx.getAtlasRegion(texturedMesh.albedoTextureId!);
       if (atlasRegion != null && mesh.uvs.isNotEmpty) {
         atlasUvs = mesh.uvs.map((uv) => atlasRegion.transformUV(uv)).toList();
       }
@@ -387,16 +386,19 @@ class CanvasRenderer {
     final hasMasks = data.drawable.hasMasks;
     if (hasMasks) {
       // 1. Compute bounding box of the drawable in world space
-      final drawableBounds = _computeTransformedBounds(vertices, data.transform);
+      final drawableBounds =
+          _computeTransformedBounds(vertices, data.transform);
 
       // Expand bounds to include mask sources
       var combinedBounds = drawableBounds;
       for (final mask in data.drawable.masks!) {
         final sourceData = renderCtx.getRenderData(mask.sourceNodeId);
         if (sourceData == null || sourceData.mesh == null) continue;
-        final sourceVerts = sourceData.deformedVertices ?? sourceData.mesh!.vertices;
+        final sourceVerts =
+            sourceData.deformedVertices ?? sourceData.mesh!.vertices;
         if (sourceVerts.isEmpty) continue;
-        final maskBounds = _computeTransformedBounds(sourceVerts, sourceData.transform);
+        final maskBounds =
+            _computeTransformedBounds(sourceVerts, sourceData.transform);
         combinedBounds = combinedBounds.expandToInclude(maskBounds);
       }
 
@@ -412,7 +414,8 @@ class CanvasRenderer {
       );
       if (maskImage == null) {
         // No valid mask sources — draw content without masking
-        _drawTexturedMeshContent(canvas, data, vertices, texture, atlasUvs, blendMode);
+        _drawTexturedMeshContent(
+            canvas, data, vertices, texture, atlasUvs, blendMode);
         return;
       }
 
@@ -427,8 +430,13 @@ class CanvasRenderer {
       if (texture != null) {
         final uvs = atlasUvs ?? mesh.uvs;
         _drawTexturedMeshWithBlending(
-          canvas, vertices, uvs, mesh.indices, texture,
-          BlendMode.srcOver, data.drawable.opacity,
+          canvas,
+          vertices,
+          uvs,
+          mesh.indices,
+          texture,
+          BlendMode.srcOver,
+          data.drawable.opacity,
         );
       }
       canvas.restore();
@@ -444,7 +452,8 @@ class CanvasRenderer {
 
       maskImage.dispose();
     } else {
-      _drawTexturedMeshContent(canvas, data, vertices, texture, atlasUvs, blendMode);
+      _drawTexturedMeshContent(
+          canvas, data, vertices, texture, atlasUvs, blendMode);
     }
   }
 
@@ -533,6 +542,14 @@ class CanvasRenderer {
       if (v.x > maxX) maxX = v.x;
       if (v.y > maxY) maxY = v.y;
     }
+
+    // Add padding so filtered samples near triangle edges are not clipped by
+    // the temporary offscreen layer bounds.
+    const pad = 2.0;
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
 
     final width = (maxX - minX).ceil();
     final height = (maxY - minY).ceil();
@@ -634,8 +651,28 @@ class CanvasRenderer {
       texCoords[i * 2 + 1] = uvs[i].y * texHeight;
     }
 
-    // Build triangle indices
-    final indexList = Uint16List.fromList(indices);
+    // Validate indices per-triangle so we never break triangle grouping.
+    // Dropping invalid indices element-wise can stitch unrelated vertices
+    // together and create long stray triangles (visible as black bars).
+    final safeTriangleIndices = <int>[];
+    for (int i = 0; i + 2 < indices.length; i += 3) {
+      final i0 = indices[i];
+      final i1 = indices[i + 1];
+      final i2 = indices[i + 2];
+      if (i0 < 0 ||
+          i1 < 0 ||
+          i2 < 0 ||
+          i0 >= vertices.length ||
+          i1 >= vertices.length ||
+          i2 >= vertices.length) {
+        continue;
+      }
+      safeTriangleIndices.add(i0);
+      safeTriangleIndices.add(i1);
+      safeTriangleIndices.add(i2);
+    }
+    if (safeTriangleIndices.length < 3) return;
+    final indexList = Uint16List.fromList(safeTriangleIndices);
 
     // Handle opacity via vertex colors with modulate blending.
     // paint.color.opacity carries the drawable's opacity (set by callers).
@@ -747,7 +784,9 @@ class CanvasRenderer {
       sortedChildren.sort((a, b) {
         final za = zsortCtx?.getZSort(a.nodeId) ?? 0;
         final zb = zsortCtx?.getZSort(b.nodeId) ?? 0;
-        return zb.compareTo(za); // Descending: larger z drawn first
+        final zCmp = zb.compareTo(za);
+        if (zCmp != 0) return zCmp;
+        return a.nodeId.compareTo(b.nodeId);
       });
     }
 
@@ -778,7 +817,9 @@ class CanvasRenderer {
       sortedChildren.sort((a, b) {
         final za = zsortCtx?.getZSort(a.nodeId) ?? 0;
         final zb = zsortCtx?.getZSort(b.nodeId) ?? 0;
-        return zb.compareTo(za); // Descending: larger z drawn first
+        final zCmp = zb.compareTo(za);
+        if (zCmp != 0) return zCmp;
+        return a.nodeId.compareTo(b.nodeId);
       });
     }
 
@@ -852,8 +893,8 @@ class CanvasRenderer {
       if (sourceData.texturedMesh?.albedoTextureId != null) {
         sourceTexture =
             renderCtx.getTexture(sourceData.texturedMesh!.albedoTextureId!);
-        final atlasRegion = renderCtx
-            .getAtlasRegion(sourceData.texturedMesh!.albedoTextureId!);
+        final atlasRegion =
+            renderCtx.getAtlasRegion(sourceData.texturedMesh!.albedoTextureId!);
         if (atlasRegion != null && sourceData.mesh!.uvs.isNotEmpty) {
           sourceAtlasUvs = sourceData.mesh!.uvs
               .map((uv) => atlasRegion.transformUV(uv))
@@ -946,9 +987,11 @@ class CanvasRenderer {
     bool invert = false,
   }) {
     if (_maskShaderProgram != null) {
-      return _applyThresholdWithShader(source, threshold, width, height, invert: invert);
+      return _applyThresholdWithShader(source, threshold, width, height,
+          invert: invert);
     }
-    return _applyThresholdWithColorFilter(source, threshold, width, height, invert: invert);
+    return _applyThresholdWithColorFilter(source, threshold, width, height,
+        invert: invert);
   }
 
   /// GPU path: apply threshold using fragment shader with step function.
@@ -1016,7 +1059,8 @@ class CanvasRenderer {
       //   scale = 1 / (1 - threshold)
       //   offset = -threshold / (1 - threshold) * 255
       final scale = threshold >= 1.0 ? 255.0 : 1.0 / (1.0 - threshold);
-      final offset = threshold >= 1.0 ? -255.0 : -threshold * 255.0 / (1.0 - threshold);
+      final offset =
+          threshold >= 1.0 ? -255.0 : -threshold * 255.0 / (1.0 - threshold);
 
       if (!invert) {
         final paint = Paint()
