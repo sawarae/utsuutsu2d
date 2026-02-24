@@ -16,7 +16,7 @@ dependencies:
   dart_psd_tool:
     git:
       url: https://github.com/sawarae/dart-psd-tool.git
-      ref: v0.01
+      ref: v0.02
 
 flutter:
   shaders:
