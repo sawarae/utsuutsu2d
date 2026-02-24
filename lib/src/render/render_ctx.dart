@@ -107,7 +107,8 @@ class RenderCtx {
   }
 
   /// Recursively collect all descendant UUIDs of a tree node
-  void _collectDescendants(TreeNode<PuppetNode> node, List<PuppetNodeUuid> result) {
+  void _collectDescendants(
+      TreeNode<PuppetNode> node, List<PuppetNodeUuid> result) {
     for (final child in node.children) {
       result.add(child.data.uuid);
       _collectDescendants(child, result);
@@ -313,7 +314,8 @@ class RenderCtx {
         );
       }
       // Apply manual vertex overrides (mesh editor preview)
-      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
+      deformedVertices =
+          _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,
@@ -346,7 +348,8 @@ class RenderCtx {
           components.mesh!.vertices,
         );
       }
-      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
+      deformedVertices =
+          _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,
@@ -379,7 +382,8 @@ class RenderCtx {
           components.mesh!.vertices,
         );
       }
-      deformedVertices = _applyVertexOverride(node.uuid, deformedVertices, components);
+      deformedVertices =
+          _applyVertexOverride(node.uuid, deformedVertices, components);
 
       final newData = RenderData(
         nodeId: data.nodeId,
@@ -400,7 +404,10 @@ class RenderCtx {
     _drawables.sort((a, b) {
       final za = zsortCtx?.getZSort(a.nodeId) ?? 0;
       final zb = zsortCtx?.getZSort(b.nodeId) ?? 0;
-      return zb.compareTo(za); // Descending: larger z drawn first (back to front)
+      final zCmp = zb.compareTo(za);
+      if (zCmp != 0) return zCmp; // Descending: larger z drawn first
+      // Keep deterministic ordering when z values are equal.
+      return a.nodeId.compareTo(b.nodeId);
     });
   }
 

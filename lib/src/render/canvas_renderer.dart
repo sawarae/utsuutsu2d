@@ -332,6 +332,14 @@ class CanvasRenderer {
       if (v.y > maxY) maxY = v.y;
     }
 
+    // Add padding so filtered samples near triangle edges are not clipped by
+    // the temporary offscreen layer bounds.
+    const pad = 2.0;
+    minX -= pad;
+    minY -= pad;
+    maxX += pad;
+    maxY += pad;
+
     final width = (maxX - minX).ceil();
     final height = (maxY - minY).ceil();
 
@@ -409,9 +417,27 @@ class CanvasRenderer {
         texCoords[i * 2 + 1] = (uvs[i].y * texture.height).toDouble();
       }
 
-      final safeIndices = Uint16List.fromList(
-        indices.where((i) => i >= 0 && i < vertices.length).toList(),
-      );
+      // Validate indices per-triangle so we never break triangle grouping.
+      // Dropping invalid indices element-wise can stitch unrelated vertices
+      // together and create long stray triangles (visible as black bars).
+      final safeTriangleIndices = <int>[];
+      for (int i = 0; i + 2 < indices.length; i += 3) {
+        final i0 = indices[i];
+        final i1 = indices[i + 1];
+        final i2 = indices[i + 2];
+        if (i0 < 0 ||
+            i1 < 0 ||
+            i2 < 0 ||
+            i0 >= vertices.length ||
+            i1 >= vertices.length ||
+            i2 >= vertices.length) {
+          continue;
+        }
+        safeTriangleIndices.add(i0);
+        safeTriangleIndices.add(i1);
+        safeTriangleIndices.add(i2);
+      }
+      final safeIndices = Uint16List.fromList(safeTriangleIndices);
       if (safeIndices.length < 3) return;
 
       final mesh = ui.Vertices.raw(
@@ -464,7 +490,10 @@ class CanvasRenderer {
       final i1 = indices[i + 1];
       final i2 = indices[i + 2];
 
-      if (i0 >= vertices.length ||
+      if (i0 < 0 ||
+          i1 < 0 ||
+          i2 < 0 ||
+          i0 >= vertices.length ||
           i1 >= vertices.length ||
           i2 >= vertices.length) {
         continue;
@@ -654,7 +683,9 @@ class CanvasRenderer {
       sortedChildren.sort((a, b) {
         final za = zsortCtx?.getZSort(a.nodeId) ?? 0;
         final zb = zsortCtx?.getZSort(b.nodeId) ?? 0;
-        return zb.compareTo(za); // Descending: larger z drawn first
+        final zCmp = zb.compareTo(za);
+        if (zCmp != 0) return zCmp;
+        return a.nodeId.compareTo(b.nodeId);
       });
     }
 
@@ -685,7 +716,9 @@ class CanvasRenderer {
       sortedChildren.sort((a, b) {
         final za = zsortCtx?.getZSort(a.nodeId) ?? 0;
         final zb = zsortCtx?.getZSort(b.nodeId) ?? 0;
-        return zb.compareTo(za); // Descending: larger z drawn first
+        final zCmp = zb.compareTo(za);
+        if (zCmp != 0) return zCmp;
+        return a.nodeId.compareTo(b.nodeId);
       });
     }
 
